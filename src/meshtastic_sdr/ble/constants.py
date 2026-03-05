@@ -22,7 +22,8 @@ NODEDB_REQUEST_ID = NODEDB_NONCE
 
 # Hardware model IDs (subset relevant for SDR)
 HW_MODEL_UNSET = 0
-HW_MODEL_LINUX_NATIVE = 255   # Used for SDR gateway identity
+HW_MODEL_PORTDUINO = 37       # Linux-based device (Raspberry Pi, SDR gateway)
+HW_MODEL_LINUX_NATIVE = HW_MODEL_PORTDUINO  # Alias for backward compat
 
 # AdminMessage field numbers (from admin.proto payload_variant oneof)
 ADMIN_GET_CHANNEL_REQUEST = 1

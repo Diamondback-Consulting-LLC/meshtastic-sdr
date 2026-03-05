@@ -7,7 +7,7 @@ import pytest
 
 from meshtastic_sdr.ble.admin_handler import (
     decode_admin_message,
-    encode_lora_config_response,
+    _encode_config_response,
     encode_owner_response,
     encode_channel_response,
     AdminHandler,
@@ -15,6 +15,8 @@ from meshtastic_sdr.ble.admin_handler import (
     MODEM_PRESET_MAP,
     CONFIG_LORA,
 )
+from meshtastic_sdr.ble.protobuf_codec import encode_config_lora
+from meshtastic_sdr.ble.constants import REGION_NAME_TO_CODE, PRESET_NAME_TO_CODE
 from meshtastic_sdr.protocol.mesh_packet import MeshPacket, DataPayload, _encode_varint
 from meshtastic_sdr.protocol.header import MeshtasticHeader
 from meshtastic_sdr.protocol.portnums import PortNum
@@ -127,7 +129,12 @@ class TestDecodeAdminMessage:
 
 class TestEncodeResponses:
     def test_encode_lora_config_response(self):
-        data = encode_lora_config_response("EU_868", "LONG_FAST", hop_limit=3)
+        config_bytes = encode_config_lora(
+            region=REGION_NAME_TO_CODE.get("EU_868", 0),
+            modem_preset=PRESET_NAME_TO_CODE.get("LONG_FAST", 0),
+            hop_limit=3,
+        )
+        data = _encode_config_response(config_bytes)
         # Should be valid protobuf bytes (AdminMessage wrapping Config wrapping LoRaConfig)
         assert len(data) > 0
         # Decode it back via our decoder

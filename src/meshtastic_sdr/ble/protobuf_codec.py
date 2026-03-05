@@ -325,11 +325,11 @@ def encode_fromradio_node_info(node_id: int, long_name: str = "",
     return _fromradio_wrap(4, ni_bytes, msg_id)
 
 
-def encode_fromradio_metadata(firmware_version: str = "2.5.0.sdr",
-                               hw_model: int = 255,
+def encode_fromradio_metadata(firmware_version: str = "2.6.0.sdr",
+                               hw_model: int = 37,
                                has_bluetooth: bool = True,
                                has_wifi: bool = False,
-                               device_state_version: int = 23,
+                               device_state_version: int = 24,
                                msg_id: int = 0) -> bytes:
     """Encode a FromRadio DeviceMetadata message.
 
@@ -345,6 +345,15 @@ def encode_fromradio_metadata(firmware_version: str = "2.5.0.sdr",
       11: hasPKC (bool)
     FromRadio field 13: metadata (length-delimited)
     """
+    if HAS_MESH_PB:
+        fr = PbFromRadio()
+        fr.id = msg_id
+        fr.metadata.firmware_version = firmware_version
+        fr.metadata.device_state_version = device_state_version
+        fr.metadata.hasWifi = has_wifi
+        fr.metadata.hasBluetooth = has_bluetooth
+        fr.metadata.hw_model = hw_model
+        return fr.SerializeToString()
     parts = []
     parts.append(_field_string(1, firmware_version))
     parts.append(_tag(2, 0) + _encode_varint(device_state_version))
@@ -621,7 +630,7 @@ def encode_module_neighbor_info(enabled: bool = False,
     return _field_submsg(10, b"".join(parts))
 
 
-def encode_module_ambient_lighting() -> bytes:
+def encode_module_ambient_lighting(**kwargs) -> bytes:
     """ModuleConfig field 11: ambient_lighting"""
     return _field_submsg(11, b"")
 

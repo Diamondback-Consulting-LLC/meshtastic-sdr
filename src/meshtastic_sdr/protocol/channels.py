@@ -5,7 +5,6 @@ for all 27 Meshtastic regions.
 """
 
 import json
-import os
 from dataclasses import dataclass, field
 
 from .encryption import DEFAULT_KEY, get_default_key
@@ -65,11 +64,11 @@ REGIONS = {
 DEFAULT_REGION = "US"
 
 
-def compute_channel_hash(channel_name: str) -> int:
+def compute_channel_hash(channel_name: str, psk: bytes = b"") -> int:
     """Compute the channel hash byte for the OTA header.
 
-    XOR of all bytes of the UTF-8 encoded channel name, masked to 8 bits.
-    Used as the channel identifier in the OTA header to match packets to channels.
+    XOR of all bytes of the UTF-8 encoded channel name AND PSK, masked to 8 bits.
+    Matches Meshtastic firmware Channels.cpp and meshtastic-python generate_channel_hash.
     """
     if not channel_name:
         channel_name = "LongFast"  # Default channel name
@@ -77,6 +76,8 @@ def compute_channel_hash(channel_name: str) -> int:
     h = 0
     for ch in channel_name.encode("utf-8"):
         h ^= ch
+    for b in psk:
+        h ^= b
     return h & 0xFF
 
 
@@ -101,13 +102,18 @@ class ChannelConfig:
 
     @property
     def channel_hash(self) -> int:
-        return compute_channel_hash(self.display_name)
+        return compute_channel_hash(self.display_name, self.psk)
 
     @classmethod
     def from_psk_shorthand(cls, psk_byte: int, name: str = "",
                            index: int = 0) -> "ChannelConfig":
-        """Create channel config from a PSK shorthand (0-10)."""
-        key = get_default_key(psk_byte) if psk_byte <= 10 else b""
+        """Create channel config from a PSK shorthand (0-10).
+
+        Raises ValueError for out-of-range values.
+        """
+        if psk_byte < 0 or psk_byte > 10:
+            raise ValueError(f"PSK shorthand must be 0-10, got {psk_byte}")
+        key = get_default_key(psk_byte)
         return cls(name=name, psk=key, index=index)
 
     def has_encryption(self) -> bool:

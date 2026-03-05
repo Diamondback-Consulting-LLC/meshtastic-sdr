@@ -25,11 +25,11 @@ class SimulatedRadio(RadioBackend):
         self._frequency = 906.875e6
         self._sample_rate = 250000
         self._bandwidth = 250000
-        self._tx_gain = 0
-        self._rx_gain = 0
+        self._tx_gain = 30
+        self._rx_gain = 30
 
     def configure(self, frequency: float, sample_rate: int, bandwidth: int,
-                  tx_gain: int = 0, rx_gain: int = 0) -> None:
+                  tx_gain: int = 30, rx_gain: int = 30) -> None:
         self._frequency = frequency
         self._sample_rate = sample_rate
         self._bandwidth = bandwidth

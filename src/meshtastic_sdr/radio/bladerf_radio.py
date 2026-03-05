@@ -47,16 +47,6 @@ class BladeRFRadio(RadioBackend):
     BUFFER_SIZE = 8192  # samples per buffer
     NUM_TRANSFERS = 8
 
-    # XB-200 filter name -> bladerf enum mapping
-    XB200_FILTERS = {
-        "auto_1db": "AUTO_1DB",
-        "auto_3db": "AUTO_3DB",
-        "custom": "CUSTOM",
-        "50m": "50M",
-        "144m": "144M",
-        "222m": "222M",
-    }
-
     def __init__(self, device_str: str = "", xb200: str = "auto",
                  xb200_filter: str = "auto_1db"):
         """Initialize BladeRF device.
@@ -77,6 +67,7 @@ class BladeRFRadio(RadioBackend):
         self._configured = False
         self._xb200 = xb200
         self._xb200_filter = xb200_filter
+        self._xb200_attached = False
 
         # Query board info
         try:
@@ -99,7 +90,7 @@ class BladeRFRadio(RadioBackend):
 
     def _attach_xb200(self) -> None:
         """Attach XB-200 transverter based on config."""
-        if self._xb200 == "false":
+        if self._xb200 == "false" or self._xb200_attached:
             return
 
         try:
@@ -107,6 +98,7 @@ class BladeRFRadio(RadioBackend):
             xb_filter = self._resolve_xb200_filter(self._xb200_filter)
             self._dev.xb200_set_filterbank(self._tx_channel, xb_filter)
             self._dev.xb200_set_filterbank(self._rx_channel, xb_filter)
+            self._xb200_attached = True
         except Exception:
             if self._xb200 == "true":
                 raise

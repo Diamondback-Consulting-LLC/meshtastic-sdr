@@ -91,6 +91,10 @@ class SDRTransport(TransportBackend):
         except ValueError:
             return None
 
+        # Check channel hash matches before attempting decrypt
+        if packet.header.channel != self.channel.channel_hash:
+            return None
+
         for_us, should_rebroadcast = self.router.process_incoming(packet)
 
         if not for_us:

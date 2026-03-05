@@ -90,8 +90,6 @@ class LoRaDemodulator:
 
                 spectrum = np.abs(np.fft.fft(dechirped, n=self.N))
                 peak_idx = int(np.argmax(spectrum))
-                peak_val = spectrum[peak_idx]
-                mean_val = np.mean(spectrum)
 
                 values.append(peak_idx)
 
@@ -101,34 +99,6 @@ class LoRaDemodulator:
                     return offset
 
         return None
-
-    def _estimate_cfo(self, preamble_samples: np.ndarray) -> float:
-        """Estimate carrier frequency offset from preamble chirps.
-
-        The preamble upchirps should all dechirp to bin 0. Any offset
-        indicates a CFO that shifts the peak.
-        """
-        sps = self._samples_per_symbol
-        offsets = []
-
-        num_chirps = min(8, len(preamble_samples) // sps)
-        for i in range(num_chirps):
-            start = i * sps
-            chunk = preamble_samples[start:start + sps]
-            sym = self._dechirp_and_detect(chunk)
-            # The detected symbol represents fractional frequency offset
-            if sym > self.N // 2:
-                sym -= self.N
-            offsets.append(sym)
-
-        if not offsets:
-            return 0.0
-
-        # Average CFO estimate in bins
-        avg_offset = np.mean(offsets)
-        # Convert bin offset to Hz
-        cfo_hz = avg_offset * self.bw / self.N
-        return float(cfo_hz)
 
     def demodulate(self, samples: np.ndarray,
                    sync_word: int = MESHTASTIC_SYNC_WORD) -> list[int] | None:

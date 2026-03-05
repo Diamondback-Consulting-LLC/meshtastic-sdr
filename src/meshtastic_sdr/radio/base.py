@@ -1,6 +1,6 @@
 """Abstract radio backend interface.
 
-Defines the common API that all radio backends (BladeRF, simulated) must implement.
+Defines the common API that all radio backends (BladeRF, SoapySDR, simulated) must implement.
 """
 
 from abc import ABC, abstractmethod

@@ -127,6 +127,9 @@ class LoRaDecoder:
         Raises:
             ValueError: If CRC check fails
         """
+        if not symbols:
+            raise ValueError("No symbols to decode")
+
         mask = (1 << self.sf) - 1
 
         # Gray mapping (reverse of demapping)

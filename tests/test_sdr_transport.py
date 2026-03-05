@@ -12,6 +12,7 @@ from meshtastic_sdr.mesh.interface import AsyncMeshInterface
 from meshtastic_sdr.mesh.node import MeshNode
 from meshtastic_sdr.protocol.mesh_packet import MeshPacket
 from meshtastic_sdr.protocol.header import BROADCAST_ADDR
+from meshtastic_sdr.protocol.channels import ChannelConfig
 
 
 def run_async(coro):
@@ -35,7 +36,7 @@ class TestSDRTransport:
             packet = MeshPacket.create_text(
                 text="Hello SDRTransport!",
                 from_node=tx_node.node_id,
-                channel=0,
+                channel=tx_transport.channel.channel_hash,
             )
             await tx_transport.send_packet(packet)
 

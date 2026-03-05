@@ -45,7 +45,9 @@ class MeshNode:
             # Generate random node ID (avoiding reserved ranges)
             node_id = struct.unpack("<I", os.urandom(4))[0]
             # Ensure it's not broadcast (0xFFFFFFFF) or zero
-            node_id = max(1, node_id & 0xFFFFFFFE)
+            node_id = node_id & 0xFFFFFFFF
+            if node_id == 0xFFFFFFFF or node_id == 0:
+                node_id = 1
 
         self.node_id = node_id
         self.long_name = long_name

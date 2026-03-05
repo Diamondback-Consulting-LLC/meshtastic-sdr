@@ -292,8 +292,8 @@ class TestConfigPersistenceRoundTrip:
         state = ConfigState(node, config=config)
         responses = state.generate_config_response(69420)  # CONFIG_NONCE
 
-        # Stage 1 should still be 36 messages
-        assert len(responses) == 36
+        # Stage 1 should still be 37 messages (my_info + metadata + own_nodeinfo + 10 configs + 15 modules + 8 channels + complete)
+        assert len(responses) == 37
 
     def test_full_save_load_handshake_cycle(self, tmp_path):
         """Full cycle: set configs → save → load → new ConfigState uses stored values."""
@@ -336,7 +336,7 @@ class TestConfigPersistenceRoundTrip:
         node = MeshNode(node_id=0xCCCCCCCC)
         state = ConfigState(node, config=loaded)
         responses = state.generate_config_response(69420)
-        assert len(responses) == 36  # same count
+        assert len(responses) == 37  # same count
 
 
 # --- PSK persistence ---

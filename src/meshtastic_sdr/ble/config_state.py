@@ -60,7 +60,7 @@ class ConfigState:
     """Generates the FromRadio config handshake response sequence."""
 
     def __init__(self, node: MeshNode, channel: ChannelConfig | None = None,
-                 firmware_version: str = "2.5.0.sdr", config=None):
+                 firmware_version: str = "2.6.0.sdr", config=None):
         self.node = node
         self.channel = channel or ChannelConfig.default()
         self.firmware_version = firmware_version
@@ -109,6 +109,17 @@ class ConfigState:
             hw_model=HW_MODEL_LINUX_NATIVE,
             has_bluetooth=True,
             has_wifi=False,
+            msg_id=self._next_id(),
+        ))
+
+        # 2b. Own NodeInfo — iOS app requires device.longName to be set
+        # (from handleNodeInfo) before it will process Config messages.
+        # Without this, handleConfig's guard drops all config silently.
+        responses.append(encode_fromradio_node_info(
+            node_id=self.node.node_id,
+            long_name=self.node.long_name,
+            short_name=self.node.short_name,
+            hw_model=HW_MODEL_LINUX_NATIVE,
             msg_id=self._next_id(),
         ))
 

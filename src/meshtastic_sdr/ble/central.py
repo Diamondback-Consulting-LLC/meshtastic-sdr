@@ -77,7 +77,10 @@ class BLECentral:
     async def disconnect(self) -> None:
         """Disconnect from the device."""
         if self._client and self._connected:
-            await self._client.stop_notify(FROMNUM_UUID)
+            try:
+                await self._client.stop_notify(FROMNUM_UUID)
+            except Exception:
+                pass  # Device may already be disconnected
             await self._client.disconnect()
             self._connected = False
 

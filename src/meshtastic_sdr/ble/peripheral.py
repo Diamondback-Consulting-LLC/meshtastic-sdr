@@ -114,10 +114,15 @@ class BLEGateway:
         if TORADIO_UUID.lower() not in char_uuid.lower():
             return
 
+        raw = bytes(value)
         try:
-            parsed = decode_toradio(bytes(value))
+            parsed = decode_toradio(raw)
         except Exception:
-            logger.warning("Failed to decode ToRadio message")
+            logger.warning("Failed to decode ToRadio message: %s", raw.hex())
+            return
+
+        if not parsed:
+            logger.debug("Empty/unrecognized ToRadio: %s", raw.hex())
             return
 
         if "want_config_id" in parsed:
@@ -131,6 +136,9 @@ class BLEGateway:
             logger.debug("Heartbeat received from phone")
         elif "packet" in parsed:
             packet = parsed["packet"]
+            if packet.header.id == 0 and not packet.data:
+                logger.debug("Ignoring empty packet (likely heartbeat artifact): %s", raw.hex())
+                return
             logger.info("Phone sent packet id=0x%08x", packet.header.id)
 
             # Check if this is an AdminMessage addressed to us

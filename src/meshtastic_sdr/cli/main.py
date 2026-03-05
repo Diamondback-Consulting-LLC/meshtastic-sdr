@@ -488,8 +488,9 @@ def cmd_ble_gateway(config: SDRConfig):
         interface = create_interface(config)
 
         def on_phone_packet(packet):
+            if packet.header.id == 0:
+                return  # Skip empty/malformed packets (e.g. heartbeat artifacts)
             ts = time.strftime("%H:%M:%S")
-            src = f"!{packet.header.from_node:08x}"
             print(f"[{ts}] Phone TX: id=0x{packet.header.id:08x}")
             interface._transmit_packet(packet)
 

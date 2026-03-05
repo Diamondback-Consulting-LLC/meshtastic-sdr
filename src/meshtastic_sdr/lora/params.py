@@ -86,7 +86,7 @@ PRESETS = {
     "SHORT_SLOW": ModemPreset("SHORT_SLOW", 8, 250000, CodingRate.CR_4_5),
     "MEDIUM_FAST": ModemPreset("MEDIUM_FAST", 9, 250000, CodingRate.CR_4_5),
     "MEDIUM_SLOW": ModemPreset("MEDIUM_SLOW", 10, 250000, CodingRate.CR_4_5),
-    "LONG_TURBO": ModemPreset("LONG_TURBO", 11, 500000, CodingRate.CR_4_8),
+    "LONG_TURBO": ModemPreset("LONG_TURBO", 11, 500000, CodingRate.CR_4_5),
     "LONG_FAST": ModemPreset("LONG_FAST", 11, 250000, CodingRate.CR_4_5),
     "LONG_MODERATE": ModemPreset("LONG_MODERATE", 11, 125000, CodingRate.CR_4_8),
     "LONG_SLOW": ModemPreset("LONG_SLOW", 12, 125000, CodingRate.CR_4_8),

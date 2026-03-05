@@ -9,7 +9,6 @@ The Data protobuf contains: portnum, payload bytes, want_response, etc.
 import struct
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .header import MeshtasticHeader, BROADCAST_ADDR, HEADER_SIZE
 from .encryption import MeshtasticCrypto

@@ -35,11 +35,11 @@ class TestConfigStateStage1:
         assert decoded[-1]["config_complete_id"] == CONFIG_NONCE
 
     def test_stage1_count(self):
-        """Stage 1: 1 my_info + 1 metadata + 10 configs + 15 modules + 8 channels + 1 complete = 36."""
+        """Stage 1: 1 my_info + 1 metadata + 1 own_nodeinfo + 10 configs + 15 modules + 8 channels + 1 complete = 37."""
         node = MeshNode(node_id=0x11111111)
         state = ConfigState(node)
         responses = state.generate_config_response(CONFIG_NONCE)
-        assert len(responses) == 36
+        assert len(responses) == 37
 
     def test_message_ids_increment(self):
         """Each response has a unique, incrementing message ID."""

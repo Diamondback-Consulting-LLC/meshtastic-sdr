@@ -179,6 +179,7 @@ class SoapyRadio(RadioBackend):
         samples = iq_samples.astype(np.complex64)
         total = len(samples)
         offset = 0
+        max_retries = 100  # Prevent infinite spin on persistent errors
 
         while offset < total:
             chunk = samples[offset:]
@@ -187,6 +188,14 @@ class SoapyRadio(RadioBackend):
             )
             if sr.ret > 0:
                 offset += sr.ret
+                max_retries = 100  # Reset on progress
+            elif sr.ret == 0:
+                # No samples written — device busy, count as retry
+                max_retries -= 1
+                if max_retries <= 0:
+                    raise RuntimeError(
+                        f"TX stalled: no progress after retries at {offset}/{total}"
+                    )
             elif sr.ret == SoapySDR.SOAPY_SDR_TIMEOUT:
                 logger.warning("TX timeout at sample %d/%d", offset, total)
                 raise RuntimeError(
@@ -213,6 +222,9 @@ class SoapyRadio(RadioBackend):
         # (typically ~1s of samples from MeshInterface._rx_loop).
         timeout_us = 500000
 
+        retries = 0
+        max_retries = 100
+
         while offset < num_samples:
             remaining = num_samples - offset
             buff = np.zeros(remaining, dtype=np.complex64)
@@ -222,13 +234,21 @@ class SoapyRadio(RadioBackend):
             if sr.ret > 0:
                 result[offset:offset + sr.ret] = buff[:sr.ret]
                 offset += sr.ret
+                retries = 0  # Reset on progress
+            elif sr.ret == 0:
+                # No samples available yet — count as retry
+                retries += 1
+                if retries >= max_retries:
+                    break
             elif sr.ret == SoapySDR.SOAPY_SDR_TIMEOUT:
                 # Return what we have — unfilled portion is zeros
                 break
             elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
                 logger.debug("RX overflow — samples were dropped")
                 # Overflow means we're reading too slowly; skip and continue
-                continue
+                retries += 1
+                if retries >= max_retries:
+                    break
             else:
                 logger.error("RX error: %s", SoapySDR.errToStr(sr.ret))
                 break
@@ -256,6 +276,7 @@ class SoapyRadio(RadioBackend):
     def close(self) -> None:
         self._close_streams()
         self._configured = False
+        self._dev = None
 
     @staticmethod
     def enumerate_devices() -> list[dict]:

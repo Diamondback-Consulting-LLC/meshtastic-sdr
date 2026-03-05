@@ -183,7 +183,8 @@ class TestSDRTransportIntegration:
             rx = SDRTransport(radio, preset_name="SHORT_FAST", node=rx_node)
             await tx.start()
 
-            pkt = MeshPacket.create_text("Integration test!", from_node=tx_node.node_id)
+            pkt = MeshPacket.create_text("Integration test!", from_node=tx_node.node_id,
+                                         channel=tx.channel.channel_hash)
             await tx.send_packet(pkt)
             received = await rx.receive_packet(timeout_s=5.0)
 
@@ -231,9 +232,12 @@ class TestBLEIntegration:
             )
 
             # Simulate phone sending a text packet via BLE
+            from meshtastic_sdr.protocol.channels import ChannelConfig as _CC
+            default_ch = _CC.default()
             pkt = MeshPacket.create_text(
                 text="Phone to air!",
                 from_node=gw_node.node_id,
+                channel=default_ch.channel_hash,
             )
             toradio = encode_toradio_packet(pkt)
 

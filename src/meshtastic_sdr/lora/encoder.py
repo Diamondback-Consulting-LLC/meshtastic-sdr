@@ -10,14 +10,14 @@ from .params import ModemPreset, CodingRate
 
 
 # LoRa whitening sequence (LFSR: x^8 + x^6 + x^5 + x^4 + 1, seed=0xFF)
+# Left-shift (MSB-first) to match SX1276/SX1262 hardware and gr-lora_sdr.
 def _generate_whitening_sequence(length: int) -> bytes:
     lfsr = 0xFF
     seq = []
     for _ in range(length):
         seq.append(lfsr)
-        # Feedback taps at bits 5, 4, 3 (0-indexed from LSB) -> polynomial x^8+x^6+x^5+x^4+1
-        feedback = ((lfsr >> 5) ^ (lfsr >> 4) ^ (lfsr >> 3) ^ lfsr) & 1
-        lfsr = ((lfsr >> 1) | (feedback << 7)) & 0xFF
+        feedback = ((lfsr >> 7) ^ (lfsr >> 5) ^ (lfsr >> 4) ^ (lfsr >> 3)) & 1
+        lfsr = ((lfsr << 1) | feedback) & 0xFF
     return bytes(seq)
 
 

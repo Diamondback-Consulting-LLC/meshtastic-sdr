@@ -63,6 +63,7 @@ from .protobuf_codec import (
     encode_config_deviceui,
     _field_varint, _field_bool, _field_string, _field_bytes, _field_submsg,
     _tag,
+    _decode_user as _decode_user_proto,
 )
 
 logger = logging.getLogger(__name__)
@@ -170,9 +171,13 @@ def decode_admin_message(payload: bytes) -> dict:
             blob = payload[pos:pos + length]
             pos += length
             return _dispatch_submsg(field_num, blob)
-        elif wire_type == 5:
+        elif wire_type == 5:  # fixed32
+            if pos + 4 > len(payload):
+                break
+            value = struct.unpack("<I", payload[pos:pos + 4])[0]
             pos += 4
-        elif wire_type == 1:
+            return _dispatch_fixed32(field_num, value)
+        elif wire_type == 1:  # fixed64
             pos += 8
         else:
             break
@@ -215,6 +220,17 @@ def _dispatch_varint(field_num: int, value: int) -> dict:
         key, fixed_value = mapping[field_num]
         return {key: fixed_value if fixed_value is not None else value}
     return {"unknown_varint_field": field_num, "value": value}
+
+
+def _dispatch_fixed32(field_num: int, value: int) -> dict:
+    """Dispatch a fixed32 AdminMessage field."""
+    # set_time_only is defined as fixed32 in admin.proto
+    mapping = {
+        ADMIN_SET_TIME_ONLY: "set_time_only",
+    }
+    if field_num in mapping:
+        return {mapping[field_num]: value}
+    return {"unknown_fixed32_field": field_num, "value": value}
 
 
 def _dispatch_submsg(field_num: int, blob: bytes) -> dict:
@@ -455,35 +471,8 @@ def _decode_channel_settings(data: bytes) -> dict:
 
 
 def _decode_user(data: bytes) -> dict:
-    """Decode a User protobuf."""
-    result = {}
-    pos = 0
-    while pos < len(data):
-        tag_byte, pos = _decode_varint(data, pos)
-        field_num = tag_byte >> 3
-        wire_type = tag_byte & 0x07
-
-        if wire_type == 0:
-            value, pos = _decode_varint(data, pos)
-            if field_num == 5:
-                result["hw_model"] = value
-        elif wire_type == 2:
-            length, pos = _decode_varint(data, pos)
-            blob = data[pos:pos + length]
-            pos += length
-            if field_num == 1:
-                result["id"] = blob.decode("utf-8", errors="replace")
-            elif field_num == 2:
-                result["long_name"] = blob.decode("utf-8", errors="replace")
-            elif field_num == 3:
-                result["short_name"] = blob.decode("utf-8", errors="replace")
-        elif wire_type == 5:
-            pos += 4
-        elif wire_type == 1:
-            pos += 8
-        else:
-            break
-    return result
+    """Decode a User protobuf. Delegates to protobuf_codec._decode_user."""
+    return _decode_user_proto(data)
 
 
 def _decode_generic(data: bytes) -> dict:
@@ -537,20 +526,6 @@ def encode_admin_response(admin_payload: bytes, from_node: int, to_node: int,
     return MeshPacket(header=header, data=data)
 
 
-def encode_lora_config_response(region: str, preset: str, hop_limit: int = 3,
-                                tx_power: int = 0, tx_enabled: bool = True) -> bytes:
-    """Encode an AdminMessage get_config_response containing LoRaConfig."""
-    config_bytes = encode_config_lora(
-        region=REGION_NAME_TO_CODE.get(region, 0),
-        modem_preset=PRESET_NAME_TO_CODE.get(preset, 0),
-        hop_limit=hop_limit,
-        tx_enabled=tx_enabled,
-        tx_power=tx_power,
-    )
-    # AdminMessage field 6 = get_config_response (length-delimited)
-    return _field_submsg(ADMIN_GET_CONFIG_RESPONSE, config_bytes)
-
-
 def _encode_config_response(config_bytes: bytes) -> bytes:
     """Wrap Config bytes in AdminMessage get_config_response."""
     return _field_submsg(ADMIN_GET_CONFIG_RESPONSE, config_bytes)
@@ -582,13 +557,15 @@ def encode_channel_response(index: int, name: str, psk: bytes,
     return _field_submsg(ADMIN_GET_CHANNEL_RESPONSE, ch_bytes)
 
 
-def encode_device_metadata_response(firmware_version: str = "2.5.0.sdr",
+def encode_device_metadata_response(firmware_version: str = "2.6.0.sdr",
                                      hw_model: int = HW_MODEL_LINUX_NATIVE,
                                      has_bluetooth: bool = True,
-                                     has_wifi: bool = False) -> bytes:
+                                     has_wifi: bool = False,
+                                     device_state_version: int = 24) -> bytes:
     """Encode an AdminMessage get_device_metadata_response."""
     parts = []
     parts.append(_field_string(1, firmware_version))
+    parts.append(_tag(2, 0) + _encode_varint(device_state_version))
     parts.append(_field_bool(4, has_wifi))
     parts.append(_field_bool(5, has_bluetooth))
     parts.append(_field_varint(9, hw_model))
@@ -839,7 +816,7 @@ class AdminHandler:
 
     def _handle_get_device_metadata(self, packet: MeshPacket) -> list[bytes]:
         admin_payload = encode_device_metadata_response(
-            firmware_version="2.5.0.sdr",
+            firmware_version="2.6.0.sdr",
             hw_model=HW_MODEL_LINUX_NATIVE,
         )
         return [self._make_admin_response(admin_payload, packet)]

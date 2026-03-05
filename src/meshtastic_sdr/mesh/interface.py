@@ -12,7 +12,7 @@ import struct
 import os
 import threading
 import time
-from typing import Callable, Optional
+from typing import Callable
 
 from ..radio.base import RadioBackend
 from ..transport.base import TransportBackend
@@ -158,6 +158,10 @@ class MeshInterface:
         except ValueError:
             return None
 
+        # Check channel hash matches before attempting decrypt
+        if packet.header.channel != self.channel.channel_hash:
+            return None
+
         # Route the packet
         for_us, should_rebroadcast = self.router.process_incoming(packet)
 
@@ -298,9 +302,17 @@ class AsyncMeshInterface:
     async def _rx_loop(self) -> None:
         """Continuous receive loop (runs as async task)."""
         while self._running:
-            packet = await self.receive_once(timeout_s=1.0)
-            if packet and self._rx_callback:
-                self._rx_callback(packet)
+            try:
+                packet = await self.receive_once(timeout_s=1.0)
+                if packet and self._rx_callback:
+                    self._rx_callback(packet)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error("Async RX loop error: %s", e)
+                if not self._running:
+                    break
 
     async def close(self) -> None:
         """Shut down the interface."""
