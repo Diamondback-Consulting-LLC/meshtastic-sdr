@@ -1,9 +1,0 @@
-Metadata-Version: 2.1
-Name: meshtastic-sdr
-Version: 0.1.0
-Summary: Meshtastic transceiver using BladeRF x40 SDR
-Requires-Python: >=3.9
-Provides-Extra: bladerf
-Provides-Extra: ble
-Provides-Extra: ble-central
-Provides-Extra: ble-peripheral

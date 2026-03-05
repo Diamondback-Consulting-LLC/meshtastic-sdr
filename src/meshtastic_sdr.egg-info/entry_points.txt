@@ -1,2 +1,0 @@
-[console_scripts]
-meshtastic-sdr = meshtastic_sdr.cli.main:main
