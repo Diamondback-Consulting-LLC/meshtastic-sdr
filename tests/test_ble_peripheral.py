@@ -106,8 +106,8 @@ class TestBLEGateway:
             toradio = encode_toradio_want_config(69420)
             mock_server.simulate_write(TORADIO_UUID, toradio)
 
-            # Stage 1: my_info + metadata + 9 configs + 15 modules + 8 channels + complete = 35
-            assert gateway.queue_size == 35
+            # Stage 1: my_info + metadata + 10 configs + 15 modules + 8 channels + complete = 36
+            assert gateway.queue_size == 36
 
             # Read them back
             responses = []

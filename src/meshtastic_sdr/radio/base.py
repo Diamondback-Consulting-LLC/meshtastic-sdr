@@ -42,6 +42,11 @@ class RadioBackend(ABC):
             Complex baseband samples (np.complex64)
         """
 
+    @property
+    def device_name(self) -> str:
+        """Human-readable device/board name."""
+        return "Unknown"
+
     @abstractmethod
     def close(self) -> None:
         """Release hardware resources."""

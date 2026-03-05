@@ -170,10 +170,14 @@ class BLEGateway:
             return bytearray()
 
     def _bump_fromnum(self) -> None:
-        """Increment FromNum counter to notify phone of new data."""
+        """Increment FromNum counter and notify phone of new data."""
         self._fromnum_counter += 1
         if self._server is not None and HAS_BLESS:
             try:
+                # Set the 4-byte LE counter value before notifying
+                char = self._server.get_characteristic(FROMNUM_UUID)
+                if char is not None:
+                    char.value = struct.pack("<I", self._fromnum_counter)
                 self._server.update_value(SERVICE_UUID, FROMNUM_UUID)
             except Exception:
                 pass

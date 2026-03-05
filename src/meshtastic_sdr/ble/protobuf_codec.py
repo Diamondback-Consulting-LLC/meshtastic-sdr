@@ -252,7 +252,8 @@ def encode_fromradio_config_complete(config_id: int, msg_id: int = 0) -> bytes:
 
 
 def encode_fromradio_my_info(node_id: int, msg_id: int = 0,
-                              nodedb_count: int = 0) -> bytes:
+                              nodedb_count: int = 0,
+                              min_app_version: int = 30200) -> bytes:
     """Encode a FromRadio message containing MyNodeInfo.
 
     MyNodeInfo fields (from proto):
@@ -269,16 +270,16 @@ def encode_fromradio_my_info(node_id: int, msg_id: int = 0,
         fr = PbFromRadio()
         fr.id = msg_id
         fr.my_info.my_node_num = node_id
+        fr.my_info.min_app_version = min_app_version
         if nodedb_count:
             fr.my_info.nodedb_count = nodedb_count
         return fr.SerializeToString()
     # Manual encoding of MyNodeInfo
-    # Proto field numbers: 1=my_node_num, 8=reboot_count, 11=min_app_version,
-    # 12=device_id, 13=pio_env, 14=firmware_edition, 15=nodedb_count
     info_parts = []
     info_parts.append(b"\x08" + _encode_varint(node_id))
+    info_parts.append(_tag(11, 0) + _encode_varint(min_app_version))
     if nodedb_count:
-        info_parts.append(_field_varint(15, nodedb_count))
+        info_parts.append(_tag(15, 0) + _encode_varint(nodedb_count))
     info_bytes = b"".join(info_parts)
     return _fromradio_wrap(3, info_bytes, msg_id)
 
@@ -328,11 +329,13 @@ def encode_fromradio_metadata(firmware_version: str = "2.5.0.sdr",
                                hw_model: int = 255,
                                has_bluetooth: bool = True,
                                has_wifi: bool = False,
+                               device_state_version: int = 23,
                                msg_id: int = 0) -> bytes:
     """Encode a FromRadio DeviceMetadata message.
 
     DeviceMetadata fields:
       1: firmware_version (string)
+      2: device_state_version (varint) — config schema version
       3: canShutdown (bool)
       4: hasWifi (bool)
       5: hasBluetooth (bool)
@@ -344,9 +347,10 @@ def encode_fromradio_metadata(firmware_version: str = "2.5.0.sdr",
     """
     parts = []
     parts.append(_field_string(1, firmware_version))
+    parts.append(_tag(2, 0) + _encode_varint(device_state_version))
     parts.append(_field_bool(4, has_wifi))
     parts.append(_field_bool(5, has_bluetooth))
-    parts.append(_field_varint(9, hw_model))
+    parts.append(_tag(9, 0) + _encode_varint(hw_model))
     meta_bytes = b"".join(parts)
     return _fromradio_wrap(13, meta_bytes, msg_id)
 
@@ -485,14 +489,13 @@ def encode_config_lora(region: int = 3, modem_preset: int = 0,
     """
     parts = []
     parts.append(_field_bool(1, use_preset))
-    if modem_preset:
-        parts.append(_field_varint(2, modem_preset))
-    parts.append(_field_varint(7, region))
-    if hop_limit:
-        parts.append(_field_varint(8, hop_limit))
+    # Always emit modem_preset and region (even when 0) so the app populates its UI
+    parts.append(_tag(2, 0) + _encode_varint(modem_preset))
+    parts.append(_tag(7, 0) + _encode_varint(region))
+    parts.append(_tag(8, 0) + _encode_varint(hop_limit))
     parts.append(_field_bool(9, tx_enabled))
     if tx_power:
-        parts.append(_field_varint(10, tx_power))
+        parts.append(_tag(10, 0) + _encode_varint(tx_power))
     lora_bytes = b"".join(parts)
     return _field_submsg(6, lora_bytes)
 
@@ -536,6 +539,14 @@ def encode_config_sessionkey() -> bytes:
     Config field 9: sessionkey (SessionkeyConfig, length-delimited)
     """
     return _field_submsg(9, b"")
+
+
+def encode_config_deviceui() -> bytes:
+    """Encode Config with empty DeviceUIConfig payload.
+
+    Config field 10: deviceui (DeviceUIConfig, length-delimited)
+    """
+    return _field_submsg(10, b"")
 
 
 # --- ModuleConfig section encoders ---
@@ -652,10 +663,11 @@ def encode_channel(index: int, name: str = "", psk: bytes = b"",
     settings_bytes = b"".join(settings_parts)
 
     ch_parts = []
-    ch_parts.append(_field_varint(1, index))
+    # Always emit index and role (even when 0) so the app knows which channel
+    ch_parts.append(_tag(1, 0) + _encode_varint(index))
     if settings_bytes:
         ch_parts.append(_field_submsg(2, settings_bytes))
-    ch_parts.append(_field_varint(3, role))
+    ch_parts.append(_tag(3, 0) + _encode_varint(role))
     return b"".join(ch_parts)
 
 

@@ -30,7 +30,11 @@ from .constants import (
     ADMIN_BEGIN_EDIT, ADMIN_COMMIT_EDIT, ADMIN_ADD_CONTACT,
     ADMIN_FACTORY_RESET_DEVICE, ADMIN_FACTORY_RESET_CONFIG,
     ADMIN_REBOOT_SECONDS, ADMIN_REBOOT_OTA_SECONDS, ADMIN_SHUTDOWN_SECONDS,
-    ADMIN_NODEDB_RESET, ADMIN_EXIT_SIMULATOR,
+    ADMIN_NODEDB_RESET, ADMIN_EXIT_SIMULATOR, ADMIN_SESSION_PASSKEY,
+    ADMIN_SET_HAM_MODE, ADMIN_GET_NODE_REMOTE_HW_PINS_REQUEST,
+    ADMIN_GET_NODE_REMOTE_HW_PINS_RESPONSE,
+    ADMIN_GET_UI_CONFIG_REQUEST, ADMIN_GET_UI_CONFIG_RESPONSE,
+    ADMIN_STORE_UI_CONFIG,
     CONFIG_DEVICE, CONFIG_POSITION, CONFIG_POWER, CONFIG_NETWORK,
     CONFIG_DISPLAY, CONFIG_LORA, CONFIG_BLUETOOTH, CONFIG_SECURITY,
     CONFIG_SESSIONKEY, CONFIG_DEVICEUI,
@@ -55,6 +59,7 @@ from .protobuf_codec import (
     encode_module_detection_sensor, encode_module_paxcounter,
     encode_module_status_message, encode_module_traffic_management,
     encode_channel,
+    encode_config_deviceui,
     _field_varint, _field_bool, _field_string, _field_bytes, _field_submsg,
     _tag,
 )
@@ -120,6 +125,9 @@ def _dispatch_varint(field_num: int, value: int) -> dict:
         ADMIN_TOGGLE_MUTED_NODE: ("toggle_muted_node", None),
         ADMIN_REMOVE_FIXED_POSITION: ("remove_fixed_position", True),
         ADMIN_SET_TIME_ONLY: ("set_time_only", None),
+        ADMIN_GET_UI_CONFIG_REQUEST: ("get_ui_config_request", True),
+        ADMIN_GET_NODE_REMOTE_HW_PINS_REQUEST: ("get_node_remote_hw_pins_request", True),
+        ADMIN_SESSION_PASSKEY: ("session_passkey", None),
     }
     if field_num in mapping:
         key, fixed_value = mapping[field_num]
@@ -153,6 +161,14 @@ def _dispatch_submsg(field_num: int, blob: bytes) -> dict:
         return {"set_canned_message": blob.decode("utf-8", errors="replace")}
     elif field_num == ADMIN_SET_RINGTONE:
         return {"set_ringtone": blob.decode("utf-8", errors="replace")}
+    elif field_num == ADMIN_SET_HAM_MODE:
+        return {"set_ham_mode": _decode_generic(blob)}
+    elif field_num == ADMIN_STORE_UI_CONFIG:
+        return {"store_ui_config": _decode_generic(blob)}
+    elif field_num == ADMIN_GET_UI_CONFIG_RESPONSE:
+        return {"get_ui_config_response": _decode_generic(blob)}
+    elif field_num == ADMIN_GET_NODE_REMOTE_HW_PINS_RESPONSE:
+        return {"get_node_remote_hw_pins_response": _decode_generic(blob)}
     return {"unknown_submsg_field": field_num, "raw_len": len(blob)}
 
 
@@ -502,7 +518,7 @@ class AdminHandler:
 
         admin = decode_admin_message(packet.data.payload)
         if not admin:
-            logger.warning("Failed to decode AdminMessage")
+            logger.warning("Failed to decode AdminMessage: %s", packet.data.payload.hex())
             return []
 
         logger.info("AdminMessage: %s", admin)
@@ -533,6 +549,15 @@ class AdminHandler:
         elif "get_device_connection_status_request" in admin:
             logger.info("get_device_connection_status_request (not implemented)")
 
+        elif "get_ui_config_request" in admin:
+            logger.info("get_ui_config_request (not implemented)")
+
+        elif "get_node_remote_hw_pins_request" in admin:
+            logger.info("get_node_remote_hw_pins_request (not implemented)")
+
+        elif "session_passkey" in admin:
+            logger.info("session_passkey: %s", admin["session_passkey"])
+
         # --- SET requests ---
         elif "set_config" in admin:
             self._handle_set_config(admin["set_config"])
@@ -554,6 +579,12 @@ class AdminHandler:
 
         elif "remove_fixed_position" in admin:
             logger.info("remove_fixed_position (not applicable for SDR)")
+
+        elif "set_ham_mode" in admin:
+            logger.info("set_ham_mode (not applicable for SDR)")
+
+        elif "store_ui_config" in admin:
+            logger.info("store_ui_config (acknowledged)")
 
         # --- Edit transactions ---
         elif "begin_edit_settings" in admin:
@@ -629,6 +660,7 @@ class AdminHandler:
             CONFIG_BLUETOOTH: lambda: encode_config_bluetooth(enabled=True),
             CONFIG_SECURITY: lambda: encode_config_security(),
             CONFIG_SESSIONKEY: lambda: encode_config_sessionkey(),
+            CONFIG_DEVICEUI: lambda: encode_config_deviceui(),
         }
 
         encoder = config_encoders.get(config_type)

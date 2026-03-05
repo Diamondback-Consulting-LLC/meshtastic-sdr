@@ -78,6 +78,10 @@ class SimulatedRadio(RadioBackend):
         with self._lock:
             return len(self._buffer)
 
+    @property
+    def device_name(self) -> str:
+        return "Simulated"
+
     def close(self) -> None:
         with self._lock:
             self._buffer = np.array([], dtype=np.complex64)

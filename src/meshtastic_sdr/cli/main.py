@@ -13,7 +13,7 @@ from ..protocol.mesh_packet import MeshPacket
 from ..mesh.node import MeshNode
 from ..mesh.interface import MeshInterface
 from ..config import (
-    SDRConfig, _UNSET, load_config, save_config, merge_cli_args,
+    SDRConfig, NodeConfig, _UNSET, load_config, save_config, merge_cli_args,
     load_node_identity, save_node_identity, resolve_psk,
 )
 
@@ -50,10 +50,18 @@ def create_interface(config: SDRConfig) -> MeshInterface:
     else:
         node_id = load_node_identity()
 
+    # Use radio device name as node name if user hasn't customized it
+    long_name = config.node.long_name
+    short_name = config.node.short_name
+    if long_name == NodeConfig().long_name:
+        long_name = radio.device_name
+    if short_name == NodeConfig().short_name:
+        short_name = radio.device_name[:4]
+
     node = MeshNode(
         node_id=node_id,
-        long_name=config.node.long_name,
-        short_name=config.node.short_name,
+        long_name=long_name,
+        short_name=short_name,
     )
 
     # Persist node ID if it was generated fresh
@@ -387,13 +395,16 @@ def cmd_ble_tether(config: SDRConfig, args):
                         print(f"[{ts}] {src}: ({len(packet.encrypted)}B encrypted)")
                     else:
                         print(f"[{ts}] {src}: (empty packet)")
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         finally:
             await central.disconnect()
             print("Disconnected.")
 
-    asyncio.run(_run())
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        pass
 
 
 def cmd_ble_gateway(config: SDRConfig):
@@ -440,14 +451,17 @@ def cmd_ble_gateway(config: SDRConfig):
         try:
             while True:
                 await asyncio.sleep(1)
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         finally:
             print("\nShutting down...")
             await gateway.stop()
             interface.close()
 
-    asyncio.run(_run())
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

@@ -78,6 +78,12 @@ class BladeRFRadio(RadioBackend):
         self._xb200 = xb200
         self._xb200_filter = xb200_filter
 
+        # Query board info
+        try:
+            self._board_name = self._dev.board_name  # e.g. "bladerf1", "bladerf2"
+        except Exception:
+            self._board_name = "BladeRF"
+
     @staticmethod
     def _resolve_xb200_filter(name: str):
         """Map filter name string to _bladerf.XB200Filter enum value."""
@@ -105,6 +111,16 @@ class BladeRFRadio(RadioBackend):
             if self._xb200 == "true":
                 raise
             # "auto" mode: silently continue without XB-200
+
+    # Friendly display names for known board identifiers
+    BOARD_NAMES = {
+        "bladerf1": "BladeRF x40",
+        "bladerf2": "BladeRF 2.0",
+    }
+
+    @property
+    def device_name(self) -> str:
+        return self.BOARD_NAMES.get(self._board_name, self._board_name)
 
     def configure(self, frequency: float, sample_rate: int, bandwidth: int,
                   tx_gain: int = 30, rx_gain: int = 30) -> None:

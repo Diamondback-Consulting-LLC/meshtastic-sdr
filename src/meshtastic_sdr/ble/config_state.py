@@ -34,6 +34,7 @@ from .protobuf_codec import (
     encode_config_bluetooth,
     encode_config_security,
     encode_config_sessionkey,
+    encode_config_deviceui,
     encode_module_mqtt,
     encode_module_serial,
     encode_module_extnotif,
@@ -234,6 +235,12 @@ class ConfigState:
         # Session key config (empty)
         responses.append(encode_fromradio_config(
             encode_config_sessionkey(),
+            msg_id=self._next_id(),
+        ))
+
+        # DeviceUI config (empty)
+        responses.append(encode_fromradio_config(
+            encode_config_deviceui(),
             msg_id=self._next_id(),
         ))
 
