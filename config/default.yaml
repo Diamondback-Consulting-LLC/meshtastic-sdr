@@ -1,0 +1,49 @@
+# meshtastic-sdr configuration
+#
+# Config file search order:
+#   1. --config <path>  (explicit CLI flag)
+#   2. ./meshtastic-sdr.yaml  (project-local)
+#   3. ~/.config/meshtastic-sdr/config.yaml  (XDG standard)
+#   4. Built-in defaults (if no file found)
+#
+# CLI args override config file values.
+# Generate this file interactively: meshtastic-sdr init
+
+# Default operating mode when no subcommand given
+# Options: ble-gateway, ble-tether, listen, send
+mode: ble-gateway
+
+# Radio region (determines frequency band)
+# Norway/Nordic uses EU_868 (869.4-869.65 MHz)
+region: EU_868
+
+# Modem preset
+# Options: SHORT_TURBO, SHORT_FAST, SHORT_SLOW, MEDIUM_FAST, MEDIUM_SLOW,
+#          LONG_TURBO, LONG_FAST, LONG_MODERATE, LONG_SLOW, VERY_LONG_SLOW
+preset: LONG_FAST
+
+node:
+  long_name: "SDR Gateway"
+  short_name: "SDR"
+  # id: "!1a2b3c4d"  # Fixed node ID. Omit for auto-persist.
+
+radio:
+  backend: bladerf        # bladerf | simulated
+  device: ""              # BladeRF device string (empty = first available)
+  xb200: auto             # auto | true | false
+  xb200_filter: auto_1db  # auto_1db, auto_3db, custom, 50m, 144m, 222m
+  tx_gain: 30
+  rx_gain: 30
+
+channel:
+  name: "LongFast"
+  psk: default            # default | none | base64-encoded key
+  index: 0
+
+ble:
+  address: ""             # BLE tether target (XX:XX:XX:XX:XX:XX)
+  gateway_name: "Meshtastic SDR"
+  scan_timeout: 5.0
+
+mesh:
+  hop_limit: 3

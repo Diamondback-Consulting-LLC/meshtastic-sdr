@@ -1,0 +1,4 @@
+numpy>=1.24
+protobuf>=4.0
+pycryptodome>=3.19
+pyyaml>=6.0

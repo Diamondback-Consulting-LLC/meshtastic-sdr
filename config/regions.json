@@ -1,0 +1,191 @@
+{
+  "US": {
+    "freq_start_mhz": 902.0,
+    "freq_end_mhz": 928.0,
+    "num_channels": 104,
+    "max_power_dbm": 30,
+    "duty_cycle_percent": 0
+  },
+  "EU_433": {
+    "freq_start_mhz": 433.0,
+    "freq_end_mhz": 434.0,
+    "num_channels": 4,
+    "max_power_dbm": 12,
+    "duty_cycle_percent": 10
+  },
+  "EU_868": {
+    "freq_start_mhz": 869.4,
+    "freq_end_mhz": 869.65,
+    "num_channels": 1,
+    "max_power_dbm": 27,
+    "duty_cycle_percent": 10
+  },
+  "CN": {
+    "freq_start_mhz": 470.0,
+    "freq_end_mhz": 510.0,
+    "num_channels": 160,
+    "max_power_dbm": 19,
+    "duty_cycle_percent": 0
+  },
+  "JP": {
+    "freq_start_mhz": 920.8,
+    "freq_end_mhz": 927.8,
+    "num_channels": 28,
+    "max_power_dbm": 16,
+    "duty_cycle_percent": 0
+  },
+  "ANZ": {
+    "freq_start_mhz": 915.0,
+    "freq_end_mhz": 928.0,
+    "num_channels": 52,
+    "max_power_dbm": 30,
+    "duty_cycle_percent": 0
+  },
+  "KR": {
+    "freq_start_mhz": 920.0,
+    "freq_end_mhz": 923.0,
+    "num_channels": 12,
+    "max_power_dbm": 14,
+    "duty_cycle_percent": 0
+  },
+  "TW": {
+    "freq_start_mhz": 920.0,
+    "freq_end_mhz": 925.0,
+    "num_channels": 20,
+    "max_power_dbm": 27,
+    "duty_cycle_percent": 0
+  },
+  "RU": {
+    "freq_start_mhz": 868.7,
+    "freq_end_mhz": 869.2,
+    "num_channels": 2,
+    "max_power_dbm": 20,
+    "duty_cycle_percent": 0
+  },
+  "IN": {
+    "freq_start_mhz": 865.0,
+    "freq_end_mhz": 867.0,
+    "num_channels": 8,
+    "max_power_dbm": 30,
+    "duty_cycle_percent": 0
+  },
+  "NZ_865": {
+    "freq_start_mhz": 864.0,
+    "freq_end_mhz": 868.0,
+    "num_channels": 16,
+    "max_power_dbm": 36,
+    "duty_cycle_percent": 0
+  },
+  "TH": {
+    "freq_start_mhz": 920.0,
+    "freq_end_mhz": 925.0,
+    "num_channels": 20,
+    "max_power_dbm": 16,
+    "duty_cycle_percent": 0
+  },
+  "UA_433": {
+    "freq_start_mhz": 433.0,
+    "freq_end_mhz": 434.79,
+    "num_channels": 7,
+    "max_power_dbm": 10,
+    "duty_cycle_percent": 0
+  },
+  "UA_868": {
+    "freq_start_mhz": 868.0,
+    "freq_end_mhz": 868.6,
+    "num_channels": 2,
+    "max_power_dbm": 14,
+    "duty_cycle_percent": 0
+  },
+  "MY_433": {
+    "freq_start_mhz": 433.0,
+    "freq_end_mhz": 435.0,
+    "num_channels": 8,
+    "max_power_dbm": 10,
+    "duty_cycle_percent": 0
+  },
+  "MY_919": {
+    "freq_start_mhz": 919.0,
+    "freq_end_mhz": 924.0,
+    "num_channels": 20,
+    "max_power_dbm": 27,
+    "duty_cycle_percent": 0
+  },
+  "SG_923": {
+    "freq_start_mhz": 920.0,
+    "freq_end_mhz": 925.0,
+    "num_channels": 20,
+    "max_power_dbm": 27,
+    "duty_cycle_percent": 0
+  },
+  "LORA_24": {
+    "freq_start_mhz": 2400.0,
+    "freq_end_mhz": 2483.5,
+    "num_channels": 6,
+    "max_power_dbm": 10,
+    "duty_cycle_percent": 0
+  },
+  "PH_433": {
+    "freq_start_mhz": 433.05,
+    "freq_end_mhz": 434.79,
+    "num_channels": 7,
+    "max_power_dbm": 10,
+    "duty_cycle_percent": 0
+  },
+  "PH_868": {
+    "freq_start_mhz": 920.0,
+    "freq_end_mhz": 925.0,
+    "num_channels": 20,
+    "max_power_dbm": 16,
+    "duty_cycle_percent": 0
+  },
+  "IL_433": {
+    "freq_start_mhz": 433.05,
+    "freq_end_mhz": 434.79,
+    "num_channels": 7,
+    "max_power_dbm": 10,
+    "duty_cycle_percent": 0
+  },
+  "IL_915": {
+    "freq_start_mhz": 915.0,
+    "freq_end_mhz": 917.0,
+    "num_channels": 8,
+    "max_power_dbm": 14,
+    "duty_cycle_percent": 0
+  },
+  "BR_915": {
+    "freq_start_mhz": 915.0,
+    "freq_end_mhz": 928.0,
+    "num_channels": 52,
+    "max_power_dbm": 30,
+    "duty_cycle_percent": 0
+  },
+  "GH_433": {
+    "freq_start_mhz": 433.05,
+    "freq_end_mhz": 434.79,
+    "num_channels": 7,
+    "max_power_dbm": 10,
+    "duty_cycle_percent": 0
+  },
+  "GH_915": {
+    "freq_start_mhz": 915.0,
+    "freq_end_mhz": 928.0,
+    "num_channels": 52,
+    "max_power_dbm": 30,
+    "duty_cycle_percent": 0
+  },
+  "NG_433": {
+    "freq_start_mhz": 433.05,
+    "freq_end_mhz": 434.79,
+    "num_channels": 7,
+    "max_power_dbm": 10,
+    "duty_cycle_percent": 0
+  },
+  "NG_915": {
+    "freq_start_mhz": 915.0,
+    "freq_end_mhz": 928.0,
+    "num_channels": 52,
+    "max_power_dbm": 30,
+    "duty_cycle_percent": 0
+  }
+}
