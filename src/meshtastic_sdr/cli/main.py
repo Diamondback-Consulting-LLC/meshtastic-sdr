@@ -20,9 +20,22 @@ from ..config import (
 
 def create_radio(config: SDRConfig):
     """Create radio backend based on SDRConfig."""
-    if config.radio.backend == "simulated":
+    backend = config.radio.backend
+
+    if backend == "simulated":
         return SimulatedRadio()
-    else:
+    elif backend == "soapy":
+        try:
+            from ..radio.soapy_radio import SoapyRadio
+            return SoapyRadio(device_str=config.radio.device)
+        except ImportError:
+            print("SoapySDR not available. Install python3-soapysdr and a driver module.")
+            print("  Ubuntu/Debian: sudo apt install python3-soapysdr soapysdr-module-bladerf")
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f"SoapySDR error: {e}")
+            sys.exit(1)
+    elif backend == "bladerf":
         try:
             from ..radio.bladerf_radio import BladeRFRadio
             return BladeRFRadio(
@@ -33,6 +46,10 @@ def create_radio(config: SDRConfig):
         except ImportError:
             print("BladeRF not available. Use --simulate for simulated mode.")
             sys.exit(1)
+    else:
+        print(f"Unknown radio backend: {backend!r}")
+        print("Supported backends: bladerf, soapy, simulated")
+        sys.exit(1)
 
 
 def create_interface(config: SDRConfig) -> MeshInterface:
@@ -82,6 +99,8 @@ def create_interface(config: SDRConfig) -> MeshInterface:
         region=config.region,
         node=node,
         channel=channel,
+        tx_gain=config.radio.tx_gain,
+        rx_gain=config.radio.rx_gain,
     )
     interface.configure_radio()
     return interface
@@ -233,10 +252,55 @@ def cmd_init(config: SDRConfig):
     print(f"Config written to {out}")
 
 
+def cmd_devices():
+    """List available SDR devices."""
+    print("Searching for SDR devices...\n")
+
+    # SoapySDR devices
+    soapy_found = False
+    try:
+        from ..radio.soapy_radio import SoapyRadio, HAS_SOAPY
+        if HAS_SOAPY:
+            devices = SoapyRadio.enumerate_devices()
+            if devices:
+                soapy_found = True
+                print("SoapySDR devices:")
+                for d in devices:
+                    name = d.get("label", d["driver"])
+                    serial = d.get("serial", "")
+                    serial_str = f"  serial={serial}" if serial else ""
+                    print(f"  {name:20s} driver={d['driver']}{serial_str}")
+                    print(f"    config: backend=soapy, device=\"{d['device_str']}\"")
+                print()
+        else:
+            print("SoapySDR: not installed (install python3-soapysdr for multi-SDR support)")
+    except ImportError:
+        print("SoapySDR: not installed")
+
+    # BladeRF
+    bladerf_found = False
+    try:
+        import bladerf._bladerf as _bladerf
+        devs = _bladerf.get_device_list()
+        if devs:
+            bladerf_found = True
+            print("BladeRF devices (native driver):")
+            for d in devs:
+                serial = getattr(d, "serial", "?")
+                print(f"  BladeRF  serial={serial}")
+            print()
+    except (ImportError, Exception):
+        pass
+
+    if not soapy_found and not bladerf_found:
+        print("No SDR devices found.")
+        print("\nTo use without hardware: meshtastic-sdr --simulate listen")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="meshtastic-sdr",
-        description="Meshtastic transceiver using BladeRF x40 SDR",
+        description="Meshtastic transceiver using SDR (BladeRF, HackRF, LimeSDR, etc.)",
     )
 
     # Global options
@@ -253,7 +317,7 @@ def main():
     parser.add_argument("--name", default=_UNSET,
                         help="Node name")
     parser.add_argument("--device", default=_UNSET,
-                        help="BladeRF device string")
+                        help="Device string (BladeRF ID or SoapySDR: driver=hackrf)")
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -284,6 +348,10 @@ def main():
     sub_ble_tether.add_argument("--message", default="",
                                  help="Message to send (for 'send' action)")
 
+    # devices command
+    sub_devices = subparsers.add_parser("devices",
+                                         help="List available SDR devices")
+
     # ble-gateway command
     sub_ble_gateway = subparsers.add_parser("ble-gateway",
                                              help="Act as BLE gateway for phone connections")
@@ -294,7 +362,10 @@ def main():
     config = load_config(args.config)
     config = merge_cli_args(config, args)
 
-    if args.command == "init":
+    if args.command == "devices":
+        cmd_devices()
+        return
+    elif args.command == "init":
         cmd_init(config)
     elif args.command == "listen":
         cmd_listen(config)

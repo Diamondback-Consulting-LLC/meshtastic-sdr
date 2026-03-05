@@ -32,7 +32,8 @@ class MeshInterface:
 
     def __init__(self, radio: RadioBackend, preset_name: str = DEFAULT_PRESET,
                  region: str = DEFAULT_REGION, node: MeshNode | None = None,
-                 channel: ChannelConfig | None = None):
+                 channel: ChannelConfig | None = None,
+                 tx_gain: int = 30, rx_gain: int = 30):
         self.radio = radio
         self.preset = get_preset(preset_name)
         self.region = region
@@ -40,6 +41,8 @@ class MeshInterface:
         self.channel = channel or ChannelConfig.default()
         self.crypto = MeshtasticCrypto(self.channel.psk)
         self.router = MeshRouter(self.node.node_id)
+        self.tx_gain = tx_gain
+        self.rx_gain = rx_gain
 
         # LoRa PHY
         self.sample_rate = self.preset.bandwidth  # Nyquist rate for sim
@@ -59,6 +62,8 @@ class MeshInterface:
             frequency=self.frequency,
             sample_rate=self.sample_rate,
             bandwidth=self.preset.bandwidth,
+            tx_gain=self.tx_gain,
+            rx_gain=self.rx_gain,
         )
 
     def send_text(self, text: str, to: int = BROADCAST_ADDR,

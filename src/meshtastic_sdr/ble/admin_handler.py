@@ -5,6 +5,7 @@ configuration changes to the running SDR interface. Handles all config
 types, module configs, channel operations, owner, and device control.
 """
 
+import base64
 import logging
 import os
 import struct
@@ -65,6 +66,87 @@ from .protobuf_codec import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# --- Named field maps for config/module decoding ---
+# Maps proto field_num -> encoder parameter name for each config type.
+
+_CONFIG_VARINT_FIELDS = {
+    "device": {1: "role", 6: "rebroadcast_mode", 7: "node_info_broadcast_secs"},
+    "position": {1: "position_broadcast_secs", 2: "position_broadcast_smart_enabled", 13: "gps_mode"},
+    "power": {1: "is_power_saving", 2: "on_battery_shutdown_after_secs"},
+    "network": {1: "wifi_enabled"},
+    "display": {1: "screen_on_secs", 6: "units"},
+    "bluetooth": {1: "enabled", 2: "mode", 3: "fixed_pin"},
+    "security": {5: "serial_enabled", 6: "debug_log_api_enabled", 8: "admin_channel_enabled"},
+}
+
+_CONFIG_STRING_FIELDS = {
+    "device": {11: "tzdef"},
+}
+
+_MODULE_VARINT_FIELDS = {
+    "mqtt": {1: "enabled", 8: "proxy_to_client_enabled"},
+    "serial": {1: "enabled"},
+    "external_notification": {1: "enabled"},
+    "store_forward": {1: "enabled"},
+    "range_test": {1: "enabled"},
+    "telemetry": {1: "device_update_interval", 2: "environment_update_interval"},
+    "canned_message": {9: "enabled"},
+    "audio": {1: "enabled"},
+    "remote_hardware": {1: "enabled"},
+    "neighbor_info": {1: "enabled", 2: "update_interval"},
+    "detection_sensor": {1: "enabled"},
+    "paxcounter": {1: "enabled"},
+    "traffic_management": {1: "enabled"},
+}
+
+_MODULE_STRING_FIELDS = {
+    "statusmessage": {1: "node_status"},
+}
+
+# Fields that represent booleans (stored as True/False instead of 0/1)
+_BOOL_FIELD_NAMES = frozenset({
+    "position_broadcast_smart_enabled", "is_power_saving", "wifi_enabled",
+    "enabled", "serial_enabled", "debug_log_api_enabled", "admin_channel_enabled",
+    "proxy_to_client_enabled",
+})
+
+
+def _decode_named_fields(data: bytes, varint_map: dict, string_map: dict | None = None) -> dict:
+    """Decode protobuf fields using named field maps.
+
+    Returns dict with encoder-compatible parameter names.
+    """
+    result = {}
+    pos = 0
+    while pos < len(data):
+        tag_byte, pos = _decode_varint(data, pos)
+        field_num = tag_byte >> 3
+        wire_type = tag_byte & 0x07
+
+        if wire_type == 0:
+            value, pos = _decode_varint(data, pos)
+            if field_num in varint_map:
+                name = varint_map[field_num]
+                result[name] = bool(value) if name in _BOOL_FIELD_NAMES else value
+        elif wire_type == 2:
+            length, pos = _decode_varint(data, pos)
+            blob = data[pos:pos + length]
+            pos += length
+            if string_map and field_num in string_map:
+                result[string_map[field_num]] = blob.decode("utf-8", errors="replace")
+        elif wire_type == 5:
+            if pos + 4 > len(data):
+                break
+            pos += 4
+        elif wire_type == 1:
+            if pos + 8 > len(data):
+                break
+            pos += 8
+        else:
+            break
+    return result
 
 
 # --- Protobuf decoders ---
@@ -204,6 +286,11 @@ def _decode_config(data: bytes) -> dict:
             name = CONFIG_FIELD_TO_NAME.get(field_num)
             if name == "lora":
                 return {"lora": _decode_lora_config(blob)}
+            elif name and name in _CONFIG_VARINT_FIELDS:
+                return {name: _decode_named_fields(
+                    blob, _CONFIG_VARINT_FIELDS[name],
+                    _CONFIG_STRING_FIELDS.get(name),
+                )}
             elif name:
                 return {name: _decode_generic(blob)}
             return {"config_field": field_num, "raw": blob}
@@ -231,6 +318,12 @@ def _decode_module_config(data: bytes) -> dict:
             blob = data[pos:pos + length]
             pos += length
             name = MODULE_FIELD_TO_NAME.get(field_num, f"module_{field_num}")
+            if name in _MODULE_VARINT_FIELDS or name in _MODULE_STRING_FIELDS:
+                return {name: _decode_named_fields(
+                    blob,
+                    _MODULE_VARINT_FIELDS.get(name, {}),
+                    _MODULE_STRING_FIELDS.get(name),
+                )}
             return {name: _decode_generic(blob)}
         elif wire_type == 0:
             _, pos = _decode_varint(data, pos)
@@ -640,25 +733,43 @@ class AdminHandler:
 
     # --- GET handlers ---
 
+    def _stored_config(self, name, **defaults):
+        """Get stored config values merged with defaults."""
+        cfg = self.gateway.config
+        if cfg and name in cfg.configs:
+            result = dict(defaults)
+            result.update(cfg.configs[name])
+            return result
+        return defaults
+
+    def _stored_module(self, name, **defaults):
+        """Get stored module config values merged with defaults."""
+        cfg = self.gateway.config
+        if cfg and name in cfg.modules:
+            result = dict(defaults)
+            result.update(cfg.modules[name])
+            return result
+        return defaults
+
     def _handle_get_config(self, config_type: int, packet: MeshPacket) -> list[bytes]:
         """Respond to get_config_request for any config type."""
         gw = self.gateway
         cfg = gw.config
 
         config_encoders = {
-            CONFIG_DEVICE: lambda: encode_config_device(role=0),
-            CONFIG_POSITION: lambda: encode_config_position(gps_mode=2),
-            CONFIG_POWER: lambda: encode_config_power(),
-            CONFIG_NETWORK: lambda: encode_config_network(),
-            CONFIG_DISPLAY: lambda: encode_config_display(),
+            CONFIG_DEVICE: lambda: encode_config_device(**self._stored_config("device")),
+            CONFIG_POSITION: lambda: encode_config_position(**self._stored_config("position", gps_mode=2)),
+            CONFIG_POWER: lambda: encode_config_power(**self._stored_config("power")),
+            CONFIG_NETWORK: lambda: encode_config_network(**self._stored_config("network")),
+            CONFIG_DISPLAY: lambda: encode_config_display(**self._stored_config("display")),
             CONFIG_LORA: lambda: encode_config_lora(
                 region=REGION_NAME_TO_CODE.get(cfg.region if cfg else "EU_868", 3),
                 modem_preset=PRESET_NAME_TO_CODE.get(cfg.preset if cfg else "LONG_FAST", 0),
                 hop_limit=cfg.mesh.hop_limit if cfg else 3,
                 tx_power=cfg.radio.tx_gain if cfg else 0,
             ),
-            CONFIG_BLUETOOTH: lambda: encode_config_bluetooth(enabled=True),
-            CONFIG_SECURITY: lambda: encode_config_security(),
+            CONFIG_BLUETOOTH: lambda: encode_config_bluetooth(**self._stored_config("bluetooth", enabled=True)),
+            CONFIG_SECURITY: lambda: encode_config_security(**self._stored_config("security")),
             CONFIG_SESSIONKEY: lambda: encode_config_sessionkey(),
             CONFIG_DEVICEUI: lambda: encode_config_deviceui(),
         }
@@ -673,30 +784,33 @@ class AdminHandler:
 
     def _handle_get_module_config(self, module_type: int, packet: MeshPacket) -> list[bytes]:
         """Respond to get_module_config_request for any module type."""
-        module_encoders = {
-            MODULE_MQTT: encode_module_mqtt,
-            MODULE_SERIAL: encode_module_serial,
-            MODULE_EXTNOTIF: encode_module_extnotif,
-            MODULE_STORE_FORWARD: encode_module_store_forward,
-            MODULE_RANGE_TEST: encode_module_range_test,
-            MODULE_TELEMETRY: encode_module_telemetry,
-            MODULE_CANNED_MSG: encode_module_canned_message,
-            MODULE_AUDIO: encode_module_audio,
-            MODULE_REMOTE_HW: encode_module_remote_hardware,
-            MODULE_NEIGHBOR_INFO: encode_module_neighbor_info,
-            MODULE_AMBIENT_LIGHTING: encode_module_ambient_lighting,
-            MODULE_DETECTION_SENSOR: encode_module_detection_sensor,
-            MODULE_PAXCOUNTER: encode_module_paxcounter,
-            MODULE_STATUS_MESSAGE: encode_module_status_message,
-            MODULE_TRAFFIC_MANAGEMENT: encode_module_traffic_management,
+        # Maps module type enum to (module_name, encoder_func)
+        module_specs = {
+            MODULE_MQTT: ("mqtt", encode_module_mqtt),
+            MODULE_SERIAL: ("serial", encode_module_serial),
+            MODULE_EXTNOTIF: ("external_notification", encode_module_extnotif),
+            MODULE_STORE_FORWARD: ("store_forward", encode_module_store_forward),
+            MODULE_RANGE_TEST: ("range_test", encode_module_range_test),
+            MODULE_TELEMETRY: ("telemetry", encode_module_telemetry),
+            MODULE_CANNED_MSG: ("canned_message", encode_module_canned_message),
+            MODULE_AUDIO: ("audio", encode_module_audio),
+            MODULE_REMOTE_HW: ("remote_hardware", encode_module_remote_hardware),
+            MODULE_NEIGHBOR_INFO: ("neighbor_info", encode_module_neighbor_info),
+            MODULE_AMBIENT_LIGHTING: ("ambient_lighting", encode_module_ambient_lighting),
+            MODULE_DETECTION_SENSOR: ("detection_sensor", encode_module_detection_sensor),
+            MODULE_PAXCOUNTER: ("paxcounter", encode_module_paxcounter),
+            MODULE_STATUS_MESSAGE: ("statusmessage", encode_module_status_message),
+            MODULE_TRAFFIC_MANAGEMENT: ("traffic_management", encode_module_traffic_management),
         }
 
-        encoder = module_encoders.get(module_type)
-        if encoder is None:
+        spec = module_specs.get(module_type)
+        if spec is None:
             logger.info("Unhandled get_module_config type %d", module_type)
             return []
 
-        admin_payload = _encode_module_config_response(encoder())
+        name, encoder = spec
+        kwargs = self._stored_module(name)
+        admin_payload = _encode_module_config_response(encoder(**kwargs))
         return [self._make_admin_response(admin_payload, packet)]
 
     def _handle_get_owner(self, packet: MeshPacket) -> list[bytes]:
@@ -744,26 +858,17 @@ class AdminHandler:
     # --- SET handlers ---
 
     def _handle_set_config(self, config: dict) -> None:
-        """Apply a set_config AdminMessage."""
+        """Apply a set_config AdminMessage and store for persistence."""
         gw = self.gateway
         if "lora" in config:
             self._apply_lora_config(config["lora"])
-        elif "device" in config:
-            logger.info("set_config device: %s", config["device"])
-        elif "bluetooth" in config:
-            logger.info("set_config bluetooth: %s", config["bluetooth"])
-        elif "position" in config:
-            logger.info("set_config position: %s", config["position"])
-        elif "power" in config:
-            logger.info("set_config power: %s", config["power"])
-        elif "network" in config:
-            logger.info("set_config network: %s", config["network"])
-        elif "display" in config:
-            logger.info("set_config display: %s", config["display"])
-        elif "security" in config:
-            logger.info("set_config security: %s", config["security"])
-        else:
-            logger.info("set_config unrecognized: %s", config)
+
+        # Store all non-LoRa configs for persistence and replay
+        if gw.config:
+            for name, values in config.items():
+                if name != "lora" and isinstance(values, dict):
+                    logger.info("set_config %s: %s", name, values)
+                    gw.config.configs[name] = values
 
     def _apply_lora_config(self, lora: dict) -> None:
         """Apply LoRa config changes."""
@@ -795,8 +900,13 @@ class AdminHandler:
             self._reconfigure_radio()
 
     def _handle_set_module_config(self, module_config: dict) -> None:
-        """Apply a set_module_config AdminMessage."""
+        """Apply a set_module_config AdminMessage and store for persistence."""
+        gw = self.gateway
         logger.info("set_module_config: %s", module_config)
+        if gw.config:
+            for name, values in module_config.items():
+                if isinstance(values, dict):
+                    gw.config.modules[name] = values
 
     def _handle_set_owner(self, user: dict) -> None:
         """Apply a set_owner AdminMessage."""
@@ -834,6 +944,14 @@ class AdminHandler:
             new_psk = settings["psk"]
             logger.info("Channel PSK updated (%d bytes)", len(new_psk))
             gw.channel.psk = new_psk
+            if gw.config:
+                from ..protocol.encryption import DEFAULT_KEY
+                if new_psk == DEFAULT_KEY:
+                    gw.config.channel.psk = "default"
+                elif not new_psk:
+                    gw.config.channel.psk = "none"
+                else:
+                    gw.config.channel.psk = base64.b64encode(new_psk).decode()
             changed = True
 
         if changed and gw.interface:

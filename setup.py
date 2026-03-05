@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="meshtastic-sdr",
     version="0.1.0",
-    description="Meshtastic transceiver using BladeRF x40 SDR",
+    description="Meshtastic transceiver using SDR (BladeRF, HackRF, LimeSDR, etc.)",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     python_requires=">=3.9",
@@ -18,6 +18,8 @@ setup(
         "ble": ["bleak>=0.21", "bless>=0.2"],
         "ble-central": ["bleak>=0.21"],
         "ble-peripheral": ["bless>=0.2"],
+        # SoapySDR is a system package, not installable via pip.
+        # Install: sudo apt install python3-soapysdr soapysdr-module-<driver>
     },
     entry_points={
         "console_scripts": [

@@ -55,8 +55,8 @@ class TestSDRConfigDefaults:
         assert config.radio.backend == "bladerf"
         assert config.radio.xb200 == "auto"
         assert config.radio.xb200_filter == "auto_1db"
-        assert config.radio.tx_gain == 30
-        assert config.radio.rx_gain == 30
+        assert config.radio.tx_gain == 47
+        assert config.radio.rx_gain == 49
 
     def test_defaults_channel(self):
         config = SDRConfig.defaults()
@@ -326,3 +326,35 @@ class TestConfigRoundTrip:
         path = save_config(config)
         assert path == tmp_path / "meshtastic-sdr" / "config.yaml"
         assert path.is_file()
+
+    def test_configs_roundtrip(self, tmp_path):
+        """Phone-set config values persist through save/load cycle."""
+        config = SDRConfig.defaults()
+        config.configs = {
+            "device": {"role": 2, "node_info_broadcast_secs": 1800},
+            "display": {"screen_on_secs": 120, "units": 1},
+            "bluetooth": {"enabled": True, "fixed_pin": 999999},
+        }
+        config.modules = {
+            "mqtt": {"enabled": True, "proxy_to_client_enabled": False},
+            "telemetry": {"device_update_interval": 300, "environment_update_interval": 600},
+        }
+        path = tmp_path / "rt.yaml"
+        save_config(config, path)
+        loaded = load_config(str(path))
+
+        assert loaded.configs["device"]["role"] == 2
+        assert loaded.configs["device"]["node_info_broadcast_secs"] == 1800
+        assert loaded.configs["display"]["screen_on_secs"] == 120
+        assert loaded.configs["bluetooth"]["enabled"] is True
+        assert loaded.modules["mqtt"]["enabled"] is True
+        assert loaded.modules["telemetry"]["device_update_interval"] == 300
+
+    def test_empty_configs_roundtrip(self, tmp_path):
+        """Config with no phone-set values saves/loads cleanly."""
+        config = SDRConfig.defaults()
+        path = tmp_path / "empty_configs.yaml"
+        save_config(config, path)
+        loaded = load_config(str(path))
+        assert loaded.configs == {}
+        assert loaded.modules == {}

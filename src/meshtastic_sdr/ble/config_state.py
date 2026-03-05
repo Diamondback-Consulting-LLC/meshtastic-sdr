@@ -163,48 +163,65 @@ class ConfigState:
 
         return responses
 
+    def _stored_config(self, name, **defaults):
+        """Get stored config values merged with defaults."""
+        if self.config and hasattr(self.config, 'configs') and name in self.config.configs:
+            result = dict(defaults)
+            result.update(self.config.configs[name])
+            return result
+        return defaults
+
+    def _stored_module(self, name, **defaults):
+        """Get stored module config values merged with defaults."""
+        if self.config and hasattr(self.config, 'modules') and name in self.config.modules:
+            result = dict(defaults)
+            result.update(self.config.modules[name])
+            return result
+        return defaults
+
     def _generate_config_sections(self) -> list[bytes]:
         """Generate FromRadio Config messages for all config types."""
         responses = []
         cfg = self.config
 
-        # Device config
-        tzdef = ""
+        # Device config — auto-detect timezone as fallback
+        device_defaults = {}
         try:
             import time as _time
-            tzdef = _time.tzname[0] if _time.tzname else ""
+            if _time.tzname:
+                device_defaults["tzdef"] = _time.tzname[0]
         except Exception:
             pass
         responses.append(encode_fromradio_config(
-            encode_config_device(role=0, tzdef=tzdef),
+            encode_config_device(**self._stored_config("device", **device_defaults)),
             msg_id=self._next_id(),
         ))
 
         # Position config (GPS not present for SDR)
         responses.append(encode_fromradio_config(
-            encode_config_position(gps_mode=2),  # NOT_PRESENT
+            encode_config_position(**self._stored_config("position", gps_mode=2)),
             msg_id=self._next_id(),
         ))
 
         # Power config
         responses.append(encode_fromradio_config(
-            encode_config_power(),
+            encode_config_power(**self._stored_config("power")),
             msg_id=self._next_id(),
         ))
 
         # Network config
         responses.append(encode_fromradio_config(
-            encode_config_network(wifi_enabled=False),
+            encode_config_network(**self._stored_config("network")),
             msg_id=self._next_id(),
         ))
 
         # Display config
         responses.append(encode_fromradio_config(
-            encode_config_display(),
+            encode_config_display(**self._stored_config("display")),
             msg_id=self._next_id(),
         ))
 
-        # LoRa config
+        # LoRa config — always uses authoritative top-level config values
         region_code = REGION_NAME_TO_CODE.get(cfg.region if cfg else "EU_868", 3)
         preset_code = PRESET_NAME_TO_CODE.get(cfg.preset if cfg else "LONG_FAST", 0)
         hop_limit = cfg.mesh.hop_limit if cfg else 3
@@ -222,13 +239,13 @@ class ConfigState:
 
         # Bluetooth config
         responses.append(encode_fromradio_config(
-            encode_config_bluetooth(enabled=True),
+            encode_config_bluetooth(**self._stored_config("bluetooth", enabled=True)),
             msg_id=self._next_id(),
         ))
 
         # Security config
         responses.append(encode_fromradio_config(
-            encode_config_security(),
+            encode_config_security(**self._stored_config("security")),
             msg_id=self._next_id(),
         ))
 
@@ -250,27 +267,29 @@ class ConfigState:
         """Generate FromRadio ModuleConfig messages for all module types."""
         responses = []
 
-        module_encoders = [
-            encode_module_mqtt,
-            encode_module_serial,
-            encode_module_extnotif,
-            encode_module_store_forward,
-            encode_module_range_test,
-            encode_module_telemetry,
-            encode_module_canned_message,
-            encode_module_audio,
-            encode_module_remote_hardware,
-            encode_module_neighbor_info,
-            encode_module_ambient_lighting,
-            encode_module_detection_sensor,
-            encode_module_paxcounter,
-            encode_module_status_message,
-            encode_module_traffic_management,
+        # (module_name, encoder_func) — names match MODULE_FIELD_TO_NAME in admin_handler
+        module_specs = [
+            ("mqtt", encode_module_mqtt),
+            ("serial", encode_module_serial),
+            ("external_notification", encode_module_extnotif),
+            ("store_forward", encode_module_store_forward),
+            ("range_test", encode_module_range_test),
+            ("telemetry", encode_module_telemetry),
+            ("canned_message", encode_module_canned_message),
+            ("audio", encode_module_audio),
+            ("remote_hardware", encode_module_remote_hardware),
+            ("neighbor_info", encode_module_neighbor_info),
+            ("ambient_lighting", encode_module_ambient_lighting),
+            ("detection_sensor", encode_module_detection_sensor),
+            ("paxcounter", encode_module_paxcounter),
+            ("statusmessage", encode_module_status_message),
+            ("traffic_management", encode_module_traffic_management),
         ]
 
-        for encoder in module_encoders:
+        for name, encoder in module_specs:
+            kwargs = self._stored_module(name)
             responses.append(encode_fromradio_module_config(
-                encoder(),
+                encoder(**kwargs),
                 msg_id=self._next_id(),
             ))
 

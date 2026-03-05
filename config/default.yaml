@@ -1,5 +1,7 @@
 # meshtastic-sdr configuration
 #
+# Optimized for: BladeRF x40 + XB-200 transverter
+#
 # Config file search order:
 #   1. --config <path>  (explicit CLI flag)
 #   2. ./meshtastic-sdr.yaml  (project-local)
@@ -13,37 +15,97 @@
 # Options: ble-gateway, ble-tether, listen, send
 mode: ble-gateway
 
-# Radio region (determines frequency band)
-# Norway/Nordic uses EU_868 (869.4-869.65 MHz)
+# Radio region (determines frequency band and channel plan)
+# EU_868: 869.4-869.65 MHz, 1 channel, 27 dBm max, 10% duty cycle
+# Other regions: US (902-928 MHz), EU_433, ANZ, etc.
+# Full list: meshtastic-sdr --help (--region flag)
 region: EU_868
 
-# Modem preset
-# Options: SHORT_TURBO, SHORT_FAST, SHORT_SLOW, MEDIUM_FAST, MEDIUM_SLOW,
-#          LONG_TURBO, LONG_FAST, LONG_MODERATE, LONG_SLOW, VERY_LONG_SLOW
+# Modem preset (determines spreading factor, bandwidth, coding rate)
+# LONG_FAST is the Meshtastic default — best balance of range and throughput
+#
+# Preset          SF   BW(kHz)  CR    Airtime(32B)  Use Case
+# SHORT_TURBO      7   500      4/5     ~11 ms      Fastest, shortest range
+# SHORT_FAST       7   250      4/5     ~22 ms      Fast, short range
+# MEDIUM_FAST      9   250      4/5     ~70 ms      Balanced
+# LONG_FAST       11   250      4/5    ~400 ms      Default — best general use
+# LONG_MODERATE   11   125      4/8   ~1200 ms      More range, slower
+# LONG_SLOW       12   125      4/8   ~2400 ms      Maximum range
+# VERY_LONG_SLOW  12    62.5    4/8   ~4800 ms      Extreme range
 preset: LONG_FAST
 
 node:
   long_name: "SDR Gateway"
   short_name: "SDR"
-  # id: "!1a2b3c4d"  # Fixed node ID. Omit for auto-persist.
+  # id: "!1a2b3c4d"  # Fixed node ID. Omit for auto-generated, persisted in
+                      # ~/.local/share/meshtastic-sdr/node_identity.yaml
 
 radio:
-  backend: bladerf        # bladerf | simulated
-  device: ""              # BladeRF device string (empty = first available)
-  xb200: auto             # auto | true | false
+  # Backend: bladerf (native, default) | soapy (universal) | simulated (testing)
+  backend: bladerf
+
+  # Device string (empty = first available device)
+  #   BladeRF: "" or "*:serial=abc"
+  #   SoapySDR: "driver=hackrf", "driver=lime,serial=abc"
+  device: ""
+
+  # XB-200 transverter (BladeRF only)
+  # The x40 covers 300 MHz-3.8 GHz natively. XB-200 extends down to 60 kHz.
+  # Needed for: EU_433 (433 MHz), CN (470 MHz), and other sub-300 MHz bands.
+  # Not needed for: EU_868, US, ANZ, JP, KR, TW, and other 800+ MHz bands.
+  # auto: try to attach at startup, continue without if not present
+  # true: require XB-200, fail if not found
+  # false: skip XB-200 detection entirely
+  xb200: auto
   xb200_filter: auto_1db  # auto_1db, auto_3db, custom, 50m, 144m, 222m
-  tx_gain: 30
-  rx_gain: 30
+
+  # Gain settings (dB)
+  # BladeRF x40 TX: combined TXVGA1+TXVGA2, effective range ~-10 to 60 dB
+  #   Max output is ~+6 dBm — well below EU_868 limit of 27 dBm
+  #   Higher = more TX power. 47 is practical max without distortion.
+  # BladeRF x40 RX: combined LNA+RXVGA1+RXVGA2, range ~5 to 66 dB
+  #   LoRa signals are weak — higher RX gain improves sensitivity.
+  #   Too high can saturate with nearby strong signals.
+  tx_gain: 47
+  rx_gain: 49
 
 channel:
+  # Channel name must match other nodes to communicate
   name: "LongFast"
-  psk: default            # default | none | base64-encoded key
+  # PSK: default (standard Meshtastic key) | none (no encryption) | base64 key
+  psk: default
   index: 0
 
 ble:
-  address: ""             # BLE tether target (XX:XX:XX:XX:XX:XX)
+  # BLE tether target address (for ble-tether mode)
+  address: ""              # XX:XX:XX:XX:XX:XX
+  # BLE gateway advertised name (for ble-gateway mode)
   gateway_name: "Meshtastic SDR"
   scan_timeout: 5.0
 
 mesh:
   hop_limit: 3
+
+# Phone-configurable settings (set via Meshtastic app, persisted here)
+# These are populated automatically when the app changes settings via BLE.
+# You can also set them manually here.
+# configs:
+#   device:
+#     role: 0                        # 0=CLIENT, 1=CLIENT_MUTE, 2=ROUTER, etc.
+#     node_info_broadcast_secs: 900
+#   position:
+#     gps_mode: 2                    # 0=DISABLED, 1=ENABLED, 2=NOT_PRESENT
+#   display:
+#     screen_on_secs: 60
+#     units: 0                       # 0=METRIC, 1=IMPERIAL
+#   bluetooth:
+#     enabled: true
+#     fixed_pin: 123456
+
+# Module configs (set via Meshtastic app)
+# modules:
+#   mqtt:
+#     enabled: false
+#   telemetry:
+#     device_update_interval: 900
+#     environment_update_interval: 1800

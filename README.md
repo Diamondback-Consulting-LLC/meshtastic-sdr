@@ -1,6 +1,6 @@
 # meshtastic-sdr
 
-A complete Python-based Meshtastic transceiver using the BladeRF x40 SDR. Turns an SDR into a functioning Meshtastic node that can send/receive messages and participate in the mesh network.
+A complete Python-based Meshtastic transceiver using software-defined radio. Supports BladeRF (native), HackRF, LimeSDR, PlutoSDR, USRP, RTL-SDR, and any other SDR with SoapySDR drivers. Turns an SDR into a functioning Meshtastic node that can send/receive messages and participate in the mesh network.
 
 ## Architecture
 
@@ -8,10 +8,10 @@ A complete Python-based Meshtastic transceiver using the BladeRF x40 SDR. Turns 
 CLI / Application Layer            <- send/receive messages, node config
 Meshtastic Protocol Layer          <- packet framing, AES-CTR encryption, protobuf
 LoRa PHY Layer                     <- CSS modulation/demod, Hamming FEC, interleaving
-Radio Backend (abstracted)         <- BladeRF x40 driver OR simulated loopback
+Radio Backend (abstracted)         <- BladeRF | SoapySDR (universal) | Simulated loopback
 ```
 
-Pure Python stack: NumPy for DSP, pycryptodome for AES, official bladerf bindings for hardware.
+Pure Python stack: NumPy for DSP, pycryptodome for AES. Three radio backends: native BladeRF bindings, SoapySDR for universal SDR support, and a simulated loopback for testing.
 
 ## Quick Start
 
@@ -105,9 +105,35 @@ meshtastic-sdr --config my.yaml info     # use explicit config file
 
 Node identity is persisted separately in `~/.local/share/meshtastic-sdr/node_identity.yaml` so your node ID survives across restarts. Set a fixed ID in config with `node.id: "!1a2b3c4d"`.
 
+### Radio Backends
+
+Three radio backends are supported via the `radio.backend` config option:
+
+| Backend | Config Value | Devices | Install |
+|---|---|---|---|
+| **BladeRF** (default) | `bladerf` | BladeRF x40/x115/xA4/xA9 | Native Python bindings |
+| **SoapySDR** | `soapy` | HackRF, LimeSDR, PlutoSDR, USRP, RTL-SDR*, Airspy*, etc. | System package |
+| **Simulated** | `simulated` | None (in-memory loopback) | Built-in |
+
+\* RTL-SDR and Airspy are receive-only — they can listen but not transmit.
+
+```yaml
+radio:
+  backend: bladerf      # bladerf | soapy | simulated
+  device: ""            # Device string (empty = first available)
+                        #   BladeRF: "" or "*:serial=abc"
+                        #   SoapySDR: "driver=hackrf", "driver=lime,serial=abc"
+```
+
+List available devices:
+
+```bash
+meshtastic-sdr devices
+```
+
 ### XB-200 Transverter
 
-The BladeRF XB-200 transverter board is auto-detected at startup. Configure behavior in the radio section:
+The BladeRF XB-200 transverter board is auto-detected at startup (BladeRF backend only):
 
 ```yaml
 radio:
@@ -121,7 +147,7 @@ radio:
 pip install -e .
 ```
 
-### BladeRF x40 Setup
+### BladeRF x40 Setup (Default)
 
 The BladeRF Python bindings ship with libbladeRF (not on PyPI):
 
@@ -138,6 +164,32 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="1d50", ATTR{idProduct}=="6066", MODE="0660", 
 EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
 groups | grep -q plugdev || sudo usermod -aG plugdev $USER
+```
+
+### SoapySDR Setup (Alternative Backend)
+
+SoapySDR provides universal SDR support. Install the core library and driver modules for your hardware:
+
+```bash
+# Core SoapySDR + Python bindings
+sudo apt install python3-soapysdr
+
+# Driver modules (install the ones for your hardware)
+sudo apt install soapysdr-module-hackrf      # HackRF One
+sudo apt install soapysdr-module-lms7        # LimeSDR
+sudo apt install soapysdr-module-plutosdr    # ADALM-PlutoSDR
+sudo apt install soapysdr-module-uhd         # USRP
+sudo apt install soapysdr-module-rtlsdr      # RTL-SDR (RX only)
+sudo apt install soapysdr-module-airspy      # Airspy (RX only)
+sudo apt install soapysdr-module-bladerf     # BladeRF via SoapySDR
+```
+
+Then set the backend in your config:
+
+```yaml
+radio:
+  backend: soapy
+  device: "driver=hackrf"   # or "driver=lime", "driver=plutosdr", etc.
 ```
 
 ### BLE Support (optional)
@@ -158,6 +210,7 @@ pip install -e ".[ble-peripheral]"  # act as gateway for phones
 - `pycryptodome>=3.19` - AES-256-CTR encryption/decryption
 - `pyyaml>=6.0` - Config file parsing
 - `bladerf` (system) - Official Nuand Python bindings for BladeRF hardware
+- `SoapySDR` (system, optional) - Universal SDR abstraction layer
 - `bleak>=0.21` (optional) - BLE Central (cross-platform async BLE client)
 - `bless>=0.2` (optional) - BLE Peripheral (GATT server)
 
@@ -186,13 +239,22 @@ pip install -e ".[ble-peripheral]"  # act as gateway for phones
 - **Encryption**: AES-128-CTR with default PSK
 - **XB-200**: Auto-detected at startup
 
-## BladeRF x40 Notes
+## Hardware Notes
+
+### BladeRF x40 (Default)
 
 - TX power: ~+6 dBm (lower than dedicated LoRa modules at +14 to +22 dBm)
 - Min RF bandwidth: 1.5 MHz (software filtering handles narrower LoRa bandwidths)
 - Sample format: SC16_Q11 (12-bit I/Q as int16)
 - Full frequency coverage: 300 MHz - 3.8 GHz (covers all Meshtastic bands)
 - XB-200 transverter: Extends range down to 60 kHz (needed for 433 MHz bands)
+
+### SoapySDR Devices
+
+- Sample format: CF32 (complex float32) — SoapySDR auto-converts from each device's native format
+- TX/RX capabilities auto-detected per device
+- Bandwidth floor of 1.5 MHz applied (matching BladeRF behavior)
+- Device enumeration: `meshtastic-sdr devices`
 
 ## Running Tests
 
@@ -205,7 +267,7 @@ python -m pytest tests/ -v
 
 ```
 src/meshtastic_sdr/
-  radio/          - Radio backend abstraction (BladeRF, simulated loopback)
+  radio/          - Radio backend abstraction (BladeRF, SoapySDR, simulated)
   lora/           - LoRa PHY: CSS modulation, FEC encoding, packet framing
   protocol/       - Meshtastic protocol: 16-byte header, AES-CTR, protobuf
   mesh/           - Mesh networking: node identity, flood routing, send/receive API

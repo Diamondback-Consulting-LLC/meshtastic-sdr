@@ -49,12 +49,12 @@ class NodeConfig:
 
 @dataclass
 class RadioConfig:
-    backend: str = "bladerf"  # bladerf | simulated
+    backend: str = "bladerf"  # bladerf | soapy | simulated
     device: str = ""
     xb200: str = "auto"  # auto | true | false
     xb200_filter: str = "auto_1db"
-    tx_gain: int = 30
-    rx_gain: int = 30
+    tx_gain: int = 47
+    rx_gain: int = 49
 
 
 @dataclass
@@ -86,6 +86,11 @@ class SDRConfig:
     channel: ChannelSettings = field(default_factory=ChannelSettings)
     ble: BLEConfig = field(default_factory=BLEConfig)
     mesh: MeshConfig = field(default_factory=MeshConfig)
+    # Phone-configurable settings persisted as named-field dicts.
+    # Keys: "device", "position", "power", "network", "display", "bluetooth", "security"
+    configs: dict = field(default_factory=dict)
+    # Module config dicts. Keys: "mqtt", "serial", "telemetry", etc.
+    modules: dict = field(default_factory=dict)
 
     @classmethod
     def defaults(cls) -> "SDRConfig":
@@ -187,6 +192,8 @@ def load_config(path: str | Path | None = None) -> SDRConfig:
         channel=_dict_to_dataclass(ChannelSettings, merged.get("channel", {})),
         ble=_dict_to_dataclass(BLEConfig, merged.get("ble", {})),
         mesh=_dict_to_dataclass(MeshConfig, merged.get("mesh", {})),
+        configs=merged.get("configs", {}),
+        modules=merged.get("modules", {}),
     )
     return config
 
