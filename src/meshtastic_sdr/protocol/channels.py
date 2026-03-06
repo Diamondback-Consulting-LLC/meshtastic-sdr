@@ -22,12 +22,20 @@ class RegionConfig:
     def channel_frequency(self, channel_num: int, bandwidth_khz: float) -> float:
         """Calculate center frequency for a channel in Hz.
 
-        Formula: freq_start + (BW/2000) + (channel_num * BW/1000)
+        channel_num is 1-indexed (matching Meshtastic firmware convention).
+        Formula: freq_start + BW/2 + (channel_num - 1) * BW
         All in MHz, returns Hz.
         """
         bw_mhz = bandwidth_khz / 1000.0
-        freq_mhz = self.freq_start + (bw_mhz / 2) + (channel_num * bw_mhz)
+        freq_mhz = self.freq_start + (bw_mhz / 2) + ((channel_num - 1) * bw_mhz)
         return freq_mhz * 1e6
+
+    def num_channels_for_bw(self, bandwidth_khz: float) -> int:
+        """Compute number of frequency slots for a given bandwidth."""
+        bw_mhz = bandwidth_khz / 1000.0
+        if bw_mhz <= 0:
+            return 1
+        return max(1, int((self.freq_end - self.freq_start) / bw_mhz))
 
 
 # All 27 Meshtastic region definitions
@@ -68,6 +76,31 @@ REGIONS = {
 }
 
 DEFAULT_REGION = "US"
+
+
+def _djb2_hash(name: str) -> int:
+    """DJB2 string hash (matches Meshtastic firmware RadioInterface.cpp).
+
+    Used for computing the frequency slot from the channel name.
+    """
+    h = 5381
+    for c in name:
+        h = ((h + (h << 5)) + ord(c)) & 0xFFFFFFFF
+    return h
+
+
+def get_channel_num(channel_name: str, num_channels: int) -> int:
+    """Compute the 1-indexed channel number for frequency selection.
+
+    Uses DJB2 hash of the channel name, matching the firmware.
+    For "LongFast" on US (104 channels): returns 20.
+    """
+    if not channel_name:
+        channel_name = "LongFast"
+    if num_channels <= 0:
+        return 1
+    h = _djb2_hash(channel_name)
+    return (h % num_channels) + 1
 
 
 def compute_channel_hash(channel_name: str, psk: bytes = b"") -> int:
@@ -128,14 +161,22 @@ class ChannelConfig:
 
 def get_default_frequency(region: str = DEFAULT_REGION,
                           bandwidth_khz: float = 250.0,
-                          channel_num: int = 20) -> float:
+                          channel_name: str = "LongFast",
+                          channel_num: int = 0) -> float:
     """Get the default frequency in Hz for a region.
 
-    US default: slot 20 at 250 kHz BW -> 907.125 MHz
+    channel_num is 1-indexed. If 0 (default), auto-derived from channel_name
+    via DJB2 hash (matching Meshtastic firmware).
+
+    US default "LongFast" at 250 kHz BW -> channelNum 20 -> 906.875 MHz.
     """
     if region not in REGIONS:
         raise ValueError(f"Unknown region '{region}'. Available: {list(REGIONS.keys())}")
-    return REGIONS[region].channel_frequency(channel_num, bandwidth_khz)
+    region_config = REGIONS[region]
+    if channel_num == 0:
+        num_ch = region_config.num_channels_for_bw(bandwidth_khz)
+        channel_num = get_channel_num(channel_name, num_ch)
+    return region_config.channel_frequency(channel_num, bandwidth_khz)
 
 
 def save_regions_json(path: str) -> None:

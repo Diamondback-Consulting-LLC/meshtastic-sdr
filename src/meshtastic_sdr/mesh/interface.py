@@ -49,7 +49,14 @@ class MeshInterface:
         self.lora = LoRaPacket(self.preset, self.sample_rate)
 
         # Frequency
-        self.frequency = get_default_frequency(region, self.preset.bandwidth / 1000)
+        self.frequency = get_default_frequency(
+            region, self.preset.bandwidth / 1000,
+            channel_name=self.channel.display_name,
+        )
+
+        # Thread safety for concurrent TX/RX
+        self._tx_mutex = threading.Lock()      # Serializes radio TX calls
+        self._state_lock = threading.Lock()    # Protects router + node state
 
         # RX callback
         self._rx_callback: Callable[[MeshPacket], None] | None = None
@@ -109,18 +116,23 @@ class MeshInterface:
         return self._transmit_packet(packet)
 
     def _transmit_packet(self, packet: MeshPacket) -> MeshPacket:
-        """Encrypt, encode, modulate, and transmit a packet."""
+        """Encrypt, encode, modulate, and transmit a packet.
+
+        Thread-safe: can be called from any thread while _rx_loop runs.
+        """
         # Encrypt the data payload
         ota_bytes = packet.encrypt_payload(self.crypto)
 
         # LoRa encode + modulate
         iq_samples = self.lora.build(ota_bytes)
 
-        # Transmit
-        self.radio.transmit(iq_samples)
+        # Transmit (serialized — prevents interleaved TX from rebroadcast + user TX)
+        with self._tx_mutex:
+            self.radio.transmit(iq_samples)
 
         # Record our own packet
-        self.router.record_packet(packet.header)
+        with self._state_lock:
+            self.router.record_packet(packet.header)
 
         return packet
 
@@ -139,7 +151,17 @@ class MeshInterface:
         total_time = max(timeout_s, max_airtime + preamble_time)
         num_samples = int(total_time * self.sample_rate)
 
+        # Clear TX flag before receive — we only care about TX *during* the window
+        self.radio.check_and_clear_tx_happened()
+
         samples = self.radio.receive(num_samples)
+
+        # If TX happened during our receive window, samples are contaminated
+        # by self-interference (~60-90 dB stronger than any incoming signal)
+        if self.radio.check_and_clear_tx_happened():
+            self.radio.flush_rx()
+            return None
+
         if len(samples) == 0:
             return None
 
@@ -162,15 +184,17 @@ class MeshInterface:
         if packet.header.channel != self.channel.channel_hash:
             return None
 
-        # Route the packet
-        for_us, should_rebroadcast = self.router.process_incoming(packet)
+        # Route the packet (thread-safe)
+        with self._state_lock:
+            for_us, should_rebroadcast = self.router.process_incoming(packet)
 
         if not for_us:
-            # Rebroadcast if needed
+            # Rebroadcast if needed (serialized with user TX)
             if should_rebroadcast:
                 rebroad = self.router.prepare_rebroadcast(packet)
                 iq = self.lora.build(rebroad.to_bytes())
-                self.radio.transmit(iq)
+                with self._tx_mutex:
+                    self.radio.transmit(iq)
             return None
 
         # Decrypt
@@ -179,8 +203,9 @@ class MeshInterface:
         except (ValueError, struct.error):
             return None
 
-        # Update node DB
-        self.node.update_node(packet.header.from_node)
+        # Update node DB (thread-safe)
+        with self._state_lock:
+            self.node.update_node(packet.header.from_node)
 
         return packet
 

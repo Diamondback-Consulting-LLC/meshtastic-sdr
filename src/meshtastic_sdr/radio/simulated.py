@@ -28,6 +28,10 @@ class SimulatedRadio(RadioBackend):
         self._tx_gain = 30
         self._rx_gain = 30
 
+        # TX state tracking — mirrors BladeRFRadio for testing
+        self._tx_active = False
+        self._tx_happened = threading.Event()
+
     def configure(self, frequency: float, sample_rate: int, bandwidth: int,
                   tx_gain: int = 30, rx_gain: int = 30) -> None:
         self._frequency = frequency
@@ -48,8 +52,13 @@ class SimulatedRadio(RadioBackend):
             )
             samples = (samples + noise).astype(np.complex64)
 
-        with self._lock:
-            self._buffer = np.concatenate([self._buffer, samples])
+        self._tx_active = True
+        try:
+            with self._lock:
+                self._buffer = np.concatenate([self._buffer, samples])
+        finally:
+            self._tx_active = False
+            self._tx_happened.set()
 
     def receive(self, num_samples: int) -> np.ndarray:
         with self._lock:
@@ -77,6 +86,20 @@ class SimulatedRadio(RadioBackend):
     def samples_available(self) -> int:
         with self._lock:
             return len(self._buffer)
+
+    @property
+    def tx_active(self) -> bool:
+        return self._tx_active
+
+    def check_and_clear_tx_happened(self) -> bool:
+        happened = self._tx_happened.is_set()
+        if happened:
+            self._tx_happened.clear()
+        return happened
+
+    def flush_rx(self) -> None:
+        with self._lock:
+            self._buffer = np.array([], dtype=np.complex64)
 
     @property
     def device_name(self) -> str:

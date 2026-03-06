@@ -6,6 +6,7 @@ by running encryption, LoRa encoding/decoding, and modulation/demodulation.
 
 import asyncio
 import struct
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -37,9 +38,14 @@ class SDRTransport(TransportBackend):
 
         self.sample_rate = self.preset.bandwidth
         self.lora = LoRaPacket(self.preset, self.sample_rate)
-        self.frequency = get_default_frequency(region, self.preset.bandwidth / 1000)
+        self.frequency = get_default_frequency(
+            region, self.preset.bandwidth / 1000,
+            channel_name=self.channel.display_name,
+        )
 
         self._executor = ThreadPoolExecutor(max_workers=2)
+        self._tx_mutex = threading.Lock()
+        self._state_lock = threading.Lock()
 
     async def start(self) -> None:
         self.radio.configure(
@@ -59,8 +65,10 @@ class SDRTransport(TransportBackend):
     def _send_sync(self, packet: MeshPacket) -> None:
         ota_bytes = packet.encrypt_payload(self.crypto)
         iq_samples = self.lora.build(ota_bytes)
-        self.radio.transmit(iq_samples)
-        self.router.record_packet(packet.header)
+        with self._tx_mutex:
+            self.radio.transmit(iq_samples)
+        with self._state_lock:
+            self.router.record_packet(packet.header)
 
     async def receive_packet(self, timeout_s: float = 10.0) -> Optional[MeshPacket]:
         loop = asyncio.get_event_loop()
@@ -74,7 +82,16 @@ class SDRTransport(TransportBackend):
         total_time = max(timeout_s, max_airtime + preamble_time)
         num_samples = int(total_time * self.sample_rate)
 
+        # Clear TX flag before receive — only care about TX *during* the window
+        self.radio.check_and_clear_tx_happened()
+
         samples = self.radio.receive(num_samples)
+
+        # Discard samples contaminated by same-frequency TX
+        if self.radio.check_and_clear_tx_happened():
+            self.radio.flush_rx()
+            return None
+
         if len(samples) == 0:
             return None
 
@@ -95,13 +112,15 @@ class SDRTransport(TransportBackend):
         if packet.header.channel != self.channel.channel_hash:
             return None
 
-        for_us, should_rebroadcast = self.router.process_incoming(packet)
+        with self._state_lock:
+            for_us, should_rebroadcast = self.router.process_incoming(packet)
 
         if not for_us:
             if should_rebroadcast:
                 rebroad = self.router.prepare_rebroadcast(packet)
                 iq = self.lora.build(rebroad.to_bytes())
-                self.radio.transmit(iq)
+                with self._tx_mutex:
+                    self.radio.transmit(iq)
             return None
 
         try:
@@ -109,5 +128,6 @@ class SDRTransport(TransportBackend):
         except (ValueError, struct.error):
             return None
 
-        self.node.update_node(packet.header.from_node)
+        with self._state_lock:
+            self.node.update_node(packet.header.from_node)
         return packet

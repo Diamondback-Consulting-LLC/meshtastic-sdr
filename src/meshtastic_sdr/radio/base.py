@@ -47,6 +47,21 @@ class RadioBackend(ABC):
         """Human-readable device/board name."""
         return "Unknown"
 
+    @property
+    def tx_active(self) -> bool:
+        """Whether a TX is currently in progress."""
+        return False
+
+    def check_and_clear_tx_happened(self) -> bool:
+        """Check if TX occurred since last check, then clear the flag.
+
+        Used by callers to detect RX contamination on same-frequency TX.
+        """
+        return False
+
+    def flush_rx(self) -> None:
+        """Discard any buffered RX samples (e.g., after TX contamination)."""
+
     @abstractmethod
     def close(self) -> None:
         """Release hardware resources."""

@@ -3,9 +3,15 @@
 Uses the official Nuand bladerf Python bindings for hardware control.
 SC16_Q11 sample format (12-bit I/Q packed as int16).
 
+The BladeRF x40 is full-duplex at the RF level (independent TX/RX paths on
+the LMS6002D), so sync_tx and sync_rx can be called from separate threads.
+However, for same-frequency LoRa operation, the TX signal drowns RX — callers
+must discard RX samples captured during TX.
+
 Requires: bladerf package (pip install bladerf)
 """
 
+import threading
 import numpy as np
 from .base import RadioBackend
 
@@ -68,6 +74,11 @@ class BladeRFRadio(RadioBackend):
         self._xb200 = xb200
         self._xb200_filter = xb200_filter
         self._xb200_attached = False
+
+        # TX state tracking — callers use this to know when RX is contaminated
+        self._tx_lock = threading.Lock()
+        self._tx_active = False
+        self._tx_happened = threading.Event()  # Set whenever a TX completes
 
         # Query board info
         try:
@@ -169,7 +180,14 @@ class BladeRFRadio(RadioBackend):
         if remainder:
             sc16 = np.pad(sc16, (0, pad_unit - remainder))
 
-        self._dev.sync_tx(sc16.tobytes(), len(sc16) // 2)
+        with self._tx_lock:
+            self._tx_active = True
+        try:
+            self._dev.sync_tx(sc16.tobytes(), len(sc16) // 2)
+        finally:
+            with self._tx_lock:
+                self._tx_active = False
+                self._tx_happened.set()
 
     def receive(self, num_samples: int) -> np.ndarray:
         if not self._configured:
@@ -183,6 +201,27 @@ class BladeRFRadio(RadioBackend):
         interleaved = np.frombuffer(buf, dtype=np.int16)
         samples = sc16q11_to_complex64(interleaved)
         return samples[:num_samples]
+
+    @property
+    def tx_active(self) -> bool:
+        with self._tx_lock:
+            return self._tx_active
+
+    def check_and_clear_tx_happened(self) -> bool:
+        happened = self._tx_happened.is_set()
+        if happened:
+            self._tx_happened.clear()
+        return happened
+
+    def flush_rx(self) -> None:
+        """Read and discard one buffer of RX samples after TX contamination."""
+        if not self._configured:
+            return
+        buf = bytearray(self.BUFFER_SIZE * 4)
+        try:
+            self._dev.sync_rx(buf, self.BUFFER_SIZE)
+        except Exception:
+            pass
 
     def close(self) -> None:
         if self._configured:

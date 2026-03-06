@@ -162,6 +162,12 @@ def mesh_packet_to_protobuf(packet: MeshPacket) -> bytes:
                 pb.decoded.source = packet.data.source
             if packet.data.request_id:
                 pb.decoded.request_id = packet.data.request_id
+            if packet.data.reply_id:
+                pb.decoded.reply_id = packet.data.reply_id
+            if packet.data.emoji:
+                pb.decoded.emoji = packet.data.emoji
+            if packet.data.bitfield:
+                pb.decoded.bitfield = packet.data.bitfield
         return pb.SerializeToString()
     else:
         return _manual_encode_mesh_packet(packet)
@@ -192,6 +198,9 @@ def mesh_packet_from_protobuf(data: bytes) -> MeshPacket:
                 dest=pb.decoded.dest,
                 source=pb.decoded.source,
                 request_id=pb.decoded.request_id,
+                reply_id=pb.decoded.reply_id,
+                emoji=pb.decoded.emoji,
+                bitfield=pb.decoded.bitfield,
             )
         return MeshPacket(header=header, data=decoded, encrypted=encrypted)
     else:

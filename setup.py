@@ -12,6 +12,7 @@ setup(
         "protobuf>=4.0",
         "pycryptodome>=3.19",
         "pyyaml>=6.0",
+        "argcomplete>=3.0",
     ],
     extras_require={
         "bladerf": ["bladerf"],

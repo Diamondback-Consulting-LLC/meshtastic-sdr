@@ -6,6 +6,12 @@ import logging
 import sys
 import time
 
+try:
+    import argcomplete
+    HAS_ARGCOMPLETE = True
+except ImportError:
+    HAS_ARGCOMPLETE = False
+
 from ..radio.simulated import SimulatedRadio
 from ..lora.params import PRESETS, DEFAULT_PRESET, get_preset
 from ..protocol.channels import ChannelConfig, REGIONS, DEFAULT_REGION, get_default_frequency
@@ -18,6 +24,7 @@ from ..config import (
     SDRConfig, NodeConfig, _UNSET, load_config, save_config, merge_cli_args,
     load_node_identity, save_node_identity, resolve_psk,
 )
+from .formatting import format_packet
 
 
 def create_radio(config: SDRConfig):
@@ -118,16 +125,7 @@ def cmd_listen(config: SDRConfig):
     print("Press Ctrl+C to stop.\n")
 
     def on_packet(packet: MeshPacket):
-        ts = time.strftime("%H:%M:%S")
-        src = f"!{packet.header.from_node:08x}"
-        if packet.data and packet.data.text:
-            print(f"[{ts}] {src}: {packet.data.text}")
-        elif packet.data:
-            from ..protocol.portnums import describe_portnum
-            port = describe_portnum(packet.data.portnum)
-            print(f"[{ts}] {src}: [{port}] {len(packet.data.payload)}B")
-        else:
-            print(f"[{ts}] {src}: (encrypted, {len(packet.encrypted)}B)")
+        print(format_packet(packet, interface.node._node_db))
 
     interface.start_receive(on_packet)
 
@@ -173,6 +171,21 @@ def cmd_info(config: SDRConfig):
     print(f"Encrypted:  {interface.channel.has_encryption()}")
 
     interface.close()
+
+
+def cmd_chat(config: SDRConfig):
+    """Interactive chat mode — listen and send in the same session."""
+    from .chat import MeshChat
+
+    interface = create_interface(config)
+    chat = MeshChat(interface, config)
+
+    try:
+        chat.cmdloop()
+    except KeyboardInterrupt:
+        print("\nGoodbye.")
+    finally:
+        interface.close()
 
 
 def cmd_scan(config: SDRConfig):
@@ -360,6 +373,19 @@ def main():
     sub_ble_gateway = subparsers.add_parser("ble-gateway",
                                              help="Act as BLE gateway for phone connections")
 
+    # chat command
+    sub_chat = subparsers.add_parser("chat",
+                                      help="Interactive chat mode (listen + send)")
+
+    # completion command
+    sub_completion = subparsers.add_parser("completion",
+                                            help="Print shell completion script")
+    sub_completion.add_argument("shell", choices=["bash", "zsh", "fish"],
+                                 help="Shell type")
+
+    if HAS_ARGCOMPLETE:
+        argcomplete.autocomplete(parser)
+
     args = parser.parse_args()
 
     # Configure logging verbosity
@@ -391,6 +417,11 @@ def main():
         cmd_ble_tether(config, args)
     elif args.command == "ble-gateway":
         cmd_ble_gateway(config)
+    elif args.command == "chat":
+        cmd_chat(config)
+    elif args.command == "completion":
+        from .completion import print_completion_script
+        print_completion_script(args.shell)
     elif args.command is None:
         # No subcommand: dispatch to configured default mode
         mode = config.mode
@@ -400,6 +431,8 @@ def main():
             cmd_ble_tether(config, args)
         elif mode == "listen":
             cmd_listen(config)
+        elif mode == "chat":
+            cmd_chat(config)
         elif mode == "send":
             print("Error: 'send' mode requires a message. Use: meshtastic-sdr send <message>")
             sys.exit(1)

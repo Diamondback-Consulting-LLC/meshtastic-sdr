@@ -30,9 +30,55 @@ meshtastic-sdr send "Hello mesh!"
 # Scan for traffic
 meshtastic-sdr scan
 
+# Interactive chat (listen + send in one session)
+meshtastic-sdr chat
+
 # Simulated mode (no hardware needed)
 meshtastic-sdr --simulate info
 ```
+
+## Interactive Chat Mode
+
+The `chat` subcommand opens an interactive REPL that combines listening and sending in one session:
+
+```bash
+meshtastic-sdr chat
+meshtastic-sdr --simulate chat
+```
+
+Type any text and press Enter to broadcast a message. Commands are prefixed with `/`:
+
+```
+mesh> Hello everyone!              # broadcast text message
+mesh> /send !1a2b3c4d Hey there    # DM to a specific node
+mesh> /info                        # show node/channel/radio info
+mesh> /nodes                       # list discovered nodes with last-heard times
+mesh> /channel                     # show channel config
+mesh> /help                        # list all commands
+mesh> /quit                        # exit (or Ctrl+D)
+```
+
+Features:
+- Incoming messages display without clobbering your input
+- Tab completion for commands and node IDs (in `/send`)
+- Command history saved across sessions (`~/.local/share/meshtastic-sdr/chat_history`)
+
+## Shell Tab Completion
+
+Enable tab completion of subcommands, `--region`, and `--preset` values in your shell:
+
+```bash
+# Bash (add to ~/.bashrc)
+eval "$(meshtastic-sdr completion bash)"
+
+# Zsh (add to ~/.zshrc)
+eval "$(meshtastic-sdr completion zsh)"
+
+# Fish
+meshtastic-sdr completion fish | source
+```
+
+Requires the `argcomplete` package (installed automatically with `pip install -e .`).
 
 ## BLE Support
 
@@ -126,6 +172,7 @@ Running `meshtastic-sdr` with no subcommand starts the configured default mode (
 ```bash
 meshtastic-sdr                           # starts ble-gateway mode
 meshtastic-sdr --simulate listen         # listen with simulated radio
+meshtastic-sdr --simulate chat           # interactive chat with simulated radio
 meshtastic-sdr --config my.yaml info     # use explicit config file
 ```
 
@@ -237,6 +284,7 @@ pip install -e ".[ble-peripheral]"  # act as gateway for phones
 - `protobuf>=4.0` - Meshtastic message serialization
 - `pycryptodome>=3.19` - AES-256-CTR encryption/decryption
 - `pyyaml>=6.0` - Config file parsing
+- `argcomplete>=3.0` - Shell tab completion for CLI
 - `bladerf` (system) - Official Nuand Python bindings for BladeRF hardware
 - `SoapySDR` (system, optional) - Universal SDR abstraction layer
 - `bleak>=0.21` (optional) - BLE Central (cross-platform async BLE client)
@@ -301,7 +349,7 @@ src/meshtastic_sdr/
   mesh/           - Mesh networking: node identity, flood routing, send/receive API
   transport/      - Packet-level transport abstraction (SDR, BLE)
   ble/            - BLE Central (tether) and Peripheral (gateway) modes
-  cli/            - CLI entry point
+  cli/            - CLI entry point, interactive chat, shell completion
 ```
 
 ## Supported Regions
