@@ -10,6 +10,7 @@ from ..radio.simulated import SimulatedRadio
 from ..lora.params import PRESETS, DEFAULT_PRESET, get_preset
 from ..protocol.channels import ChannelConfig, REGIONS, DEFAULT_REGION, get_default_frequency
 from ..protocol.encryption import MeshtasticCrypto
+from ..protocol.header import BROADCAST_ADDR
 from ..protocol.mesh_packet import MeshPacket
 from ..mesh.node import MeshNode
 from ..mesh.interface import MeshInterface
@@ -533,6 +534,7 @@ def cmd_ble_gateway(config: SDRConfig):
         print(f"  Node ID: {interface.node.node_id_str}")
         await gateway.start(name=ble_name)
         print("BLE Gateway running. Waiting for phone connections...")
+        print("Type a message to inject a text packet. Use /help for commands.")
         print("Press Ctrl+C to stop.\n")
 
         # Also listen for radio packets and forward to phone
@@ -554,6 +556,123 @@ def cmd_ble_gateway(config: SDRConfig):
         )
         telemetry.start()
 
+        # Stdin reader for injecting simulated received packets
+        from ..ble.simulator import (
+            SimulatorConfig,
+            create_position_packet,
+            create_nodeinfo_packet,
+            create_telemetry_device_packet,
+            create_telemetry_env_packet,
+            create_waypoint_packet,
+            create_traceroute_packet,
+            create_neighborinfo_packet,
+        )
+
+        sim_cfg = SimulatorConfig(
+            latitude=config.simulator.latitude,
+            longitude=config.simulator.longitude,
+            altitude=config.simulator.altitude,
+        )
+        fake_sender = sim_cfg.fake_sender
+        ch = interface.channel.channel_hash
+        our_id = interface.node.node_id
+
+        def _print_help():
+            print("Simulator commands:")
+            print("  <text>                     Send text message")
+            print("  /pos                       Position (config defaults)")
+            print("  /pos <lat> <lon>           Position (custom)")
+            print("  /node                      Node info")
+            print("  /telemetry                 Device metrics")
+            print("  /env                       Environment metrics")
+            print("  /waypoint                  Waypoint (config defaults)")
+            print("  /waypoint <lat> <lon> <name>  Waypoint (custom)")
+            print("  /traceroute                Traceroute")
+            print("  /neighborinfo              Neighbor info")
+            print("  /all                       Send one of each type")
+            print("  /help                      This help")
+
+        def _dispatch_command(text: str) -> list[tuple[MeshPacket, str]]:
+            """Parse a line and return list of (packet, description) tuples."""
+            if not text.startswith("/"):
+                pkt = MeshPacket.create_text(
+                    text=text, from_node=fake_sender,
+                    to=BROADCAST_ADDR, channel=ch,
+                )
+                return [(pkt, f"text: {text}")]
+
+            parts = text.split()
+            cmd = parts[0].lower()
+
+            if cmd == "/help":
+                _print_help()
+                return []
+            elif cmd == "/pos":
+                lat = float(parts[1]) if len(parts) > 1 else sim_cfg.latitude
+                lon = float(parts[2]) if len(parts) > 2 else sim_cfg.longitude
+                pkt = create_position_packet(fake_sender, ch, lat, lon, sim_cfg.altitude)
+                return [(pkt, f"position ({lat}, {lon})")]
+            elif cmd == "/node":
+                pkt = create_nodeinfo_packet(fake_sender, ch)
+                return [(pkt, "nodeinfo")]
+            elif cmd == "/telemetry":
+                pkt = create_telemetry_device_packet(fake_sender, ch)
+                return [(pkt, "device telemetry")]
+            elif cmd == "/env":
+                pkt = create_telemetry_env_packet(fake_sender, ch)
+                return [(pkt, "environment telemetry")]
+            elif cmd == "/waypoint":
+                lat = float(parts[1]) if len(parts) > 1 else sim_cfg.latitude
+                lon = float(parts[2]) if len(parts) > 2 else sim_cfg.longitude
+                name = " ".join(parts[3:]) if len(parts) > 3 else "SimWaypoint"
+                pkt = create_waypoint_packet(fake_sender, ch, lat, lon, name)
+                return [(pkt, f"waypoint '{name}' ({lat}, {lon})")]
+            elif cmd == "/traceroute":
+                pkt = create_traceroute_packet(fake_sender, ch, our_id)
+                return [(pkt, "traceroute")]
+            elif cmd == "/neighborinfo":
+                pkt = create_neighborinfo_packet(fake_sender, ch, our_id)
+                return [(pkt, "neighborinfo")]
+            elif cmd == "/all":
+                return [
+                    (MeshPacket.create_text(text="Hello from simulator", from_node=fake_sender, to=BROADCAST_ADDR, channel=ch), "text"),
+                    (create_position_packet(fake_sender, ch, sim_cfg.latitude, sim_cfg.longitude, sim_cfg.altitude), "position"),
+                    (create_nodeinfo_packet(fake_sender, ch), "nodeinfo"),
+                    (create_telemetry_device_packet(fake_sender, ch), "device telemetry"),
+                    (create_telemetry_env_packet(fake_sender, ch), "environment telemetry"),
+                    (create_waypoint_packet(fake_sender, ch, sim_cfg.latitude, sim_cfg.longitude), "waypoint"),
+                    (create_traceroute_packet(fake_sender, ch, our_id), "traceroute"),
+                    (create_neighborinfo_packet(fake_sender, ch, our_id), "neighborinfo"),
+                ]
+            else:
+                print(f"Unknown command: {cmd}. Type /help for available commands.")
+                return []
+
+        async def _stdin_reader():
+            """Read lines from stdin and dispatch as simulated packets."""
+            loop = asyncio.get_event_loop()
+            reader = asyncio.StreamReader()
+            await loop.connect_read_pipe(
+                lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
+            while True:
+                line = await reader.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").strip()
+                if not text:
+                    continue
+                try:
+                    packets = _dispatch_command(text)
+                except (ValueError, IndexError) as e:
+                    print(f"Error parsing command: {e}")
+                    continue
+                for packet, desc in packets:
+                    gateway.queue_packet_for_phone(packet)
+                    ts = time.strftime("%H:%M:%S")
+                    print(f"[{ts}] Injected {desc} from !{fake_sender:08x}")
+
+        stdin_task = asyncio.ensure_future(_stdin_reader())
+
         # Monitor connection state for console output
         was_connected = False
         try:
@@ -571,6 +690,7 @@ def cmd_ble_gateway(config: SDRConfig):
             pass
         finally:
             print("\nShutting down...")
+            stdin_task.cancel()
             telemetry.stop()
             await gateway.stop()
             interface.close()

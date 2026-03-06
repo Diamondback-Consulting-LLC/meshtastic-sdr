@@ -77,6 +77,13 @@ class MeshConfig:
 
 
 @dataclass
+class SimulatorSettings:
+    latitude: float = 59.9139      # Oslo, Norway
+    longitude: float = 10.7522
+    altitude: int = 25             # meters MSL
+
+
+@dataclass
 class SDRConfig:
     mode: str = "ble-gateway"
     region: str = "EU_868"
@@ -86,6 +93,7 @@ class SDRConfig:
     channel: ChannelSettings = field(default_factory=ChannelSettings)
     ble: BLEConfig = field(default_factory=BLEConfig)
     mesh: MeshConfig = field(default_factory=MeshConfig)
+    simulator: SimulatorSettings = field(default_factory=SimulatorSettings)
     # Phone-configurable settings persisted as named-field dicts.
     # Keys: "device", "position", "power", "network", "display", "bluetooth", "security"
     configs: dict = field(default_factory=dict)
@@ -192,6 +200,7 @@ def load_config(path: str | Path | None = None) -> SDRConfig:
         channel=_dict_to_dataclass(ChannelSettings, merged.get("channel", {})),
         ble=_dict_to_dataclass(BLEConfig, merged.get("ble", {})),
         mesh=_dict_to_dataclass(MeshConfig, merged.get("mesh", {})),
+        simulator=_dict_to_dataclass(SimulatorSettings, merged.get("simulator", {})),
         configs=merged.get("configs", {}),
         modules=merged.get("modules", {}),
     )

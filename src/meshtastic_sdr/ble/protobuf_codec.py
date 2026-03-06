@@ -80,6 +80,11 @@ def _field_float(field_num: int, value: float) -> bytes:
     return _tag(field_num, 5) + struct.pack("<f", value)
 
 
+def _field_sfixed32(field_num: int, value: int) -> bytes:
+    """Encode a sfixed32 field (signed 32-bit little-endian, wire type 5)."""
+    return _tag(field_num, 5) + struct.pack("<i", value)
+
+
 def _field_sint32(field_num: int, value: int) -> bytes:
     """Encode a sint32 field (zigzag encoding)."""
     if value == 0:
