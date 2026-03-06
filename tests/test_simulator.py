@@ -1,8 +1,5 @@
 """Tests for BLE gateway simulator packet factories."""
 
-import struct
-import time
-
 from meshtastic_sdr.ble.simulator import (
     SimulatorConfig,
     create_position_packet,
@@ -13,7 +10,7 @@ from meshtastic_sdr.ble.simulator import (
     create_traceroute_packet,
     create_neighborinfo_packet,
 )
-from meshtastic_sdr.protocol.mesh_packet import MeshPacket, DataPayload
+from meshtastic_sdr.protocol.mesh_packet import MeshPacket
 from meshtastic_sdr.protocol.portnums import PortNum
 from meshtastic_sdr.protocol.header import BROADCAST_ADDR
 

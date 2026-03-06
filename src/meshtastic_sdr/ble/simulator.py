@@ -75,8 +75,8 @@ def create_position_packet(sender: int, channel_hash: int,
     """Create a POSITION_APP packet.
 
     Position proto fields:
-      1: latitude_i (sint32, lat * 1e7)
-      2: longitude_i (sint32, lon * 1e7)
+      1: latitude_i (sfixed32, lat * 1e7)
+      2: longitude_i (sfixed32, lon * 1e7)
       3: altitude (int32)
       4: time (fixed32, epoch seconds)
     """
@@ -173,8 +173,8 @@ def create_waypoint_packet(sender: int, channel_hash: int,
 
     Waypoint proto fields:
       1: id (uint32)
-      2: latitude_i (sint32)
-      3: longitude_i (sint32)
+      2: latitude_i (sfixed32)
+      3: longitude_i (sfixed32)
       4: expire (uint32, epoch seconds)
       5: locked_to (uint32)
       6: name (string)
@@ -215,7 +215,7 @@ def create_traceroute_packet(sender: int, channel_hash: int,
     """Create a TRACEROUTE_APP packet with a fake 2-hop route.
 
     RouteDiscovery proto fields:
-      1: route (repeated uint32)
+      1: route (repeated fixed32)
       2: snr_towards (repeated int32) — SNR * 4
     """
     hop1 = 0xAA000001
