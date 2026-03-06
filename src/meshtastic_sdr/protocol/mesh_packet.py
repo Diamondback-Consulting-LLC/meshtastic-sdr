@@ -34,6 +34,7 @@ class DataPayload:
     request_id: int = 0
     reply_id: int = 0
     emoji: int = 0
+    bitfield: int = 0
 
     def to_bytes(self) -> bytes:
         """Serialize to protobuf bytes (if protobuf available) or manual encoding."""
@@ -53,6 +54,8 @@ class DataPayload:
                 data.reply_id = self.reply_id
             if self.emoji:
                 data.emoji = self.emoji
+            if self.bitfield:
+                data.bitfield = self.bitfield
             return data.SerializeToString()
         else:
             return self._manual_encode()
@@ -72,6 +75,7 @@ class DataPayload:
                 request_id=data.request_id,
                 reply_id=data.reply_id,
                 emoji=data.emoji,
+                bitfield=data.bitfield,
             )
         else:
             return cls._manual_decode(raw)
@@ -122,6 +126,10 @@ class DataPayload:
         if self.emoji:
             parts.append(b"\x45" + struct.pack("<I", self.emoji))
 
+        # Field 9: bitfield (varint), tag = (9 << 3) | 0 = 0x48
+        if self.bitfield:
+            parts.append(b"\x48" + _encode_varint(self.bitfield))
+
         return b"".join(parts)
 
     @classmethod
@@ -140,6 +148,8 @@ class DataPayload:
                     result.portnum = value
                 elif field_num == 3:
                     result.want_response = bool(value)
+                elif field_num == 9:
+                    result.bitfield = value
             elif wire_type == 2:  # length-delimited
                 length, pos = _decode_varint(raw, pos)
                 data = raw[pos:pos + length]

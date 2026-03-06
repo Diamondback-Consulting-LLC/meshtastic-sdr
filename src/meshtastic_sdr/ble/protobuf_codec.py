@@ -148,6 +148,8 @@ def mesh_packet_to_protobuf(packet: MeshPacket) -> bytes:
         pb.hop_limit = packet.header.hop_limit
         pb.want_ack = packet.header.want_ack
         pb.hop_start = packet.header.hop_start
+        if packet.header.via_mqtt:
+            pb.via_mqtt = True
         if packet.encrypted:
             pb.encrypted = packet.encrypted
         elif packet.data:
@@ -178,6 +180,7 @@ def mesh_packet_from_protobuf(data: bytes) -> MeshPacket:
             want_ack=pb.want_ack,
             hop_start=pb.hop_start,
             channel=pb.channel,
+            via_mqtt=pb.via_mqtt,
         )
         encrypted = bytes(pb.encrypted) if pb.encrypted else b""
         decoded = None
@@ -739,8 +742,7 @@ def encode_config_lora(region: int = 3, modem_preset: int = 0,
     parts.append(_tag(7, 0) + _encode_varint(region))
     parts.append(_tag(8, 0) + _encode_varint(hop_limit))
     parts.append(_field_bool(9, tx_enabled))
-    if tx_power:
-        parts.append(_tag(10, 0) + _encode_varint(tx_power))
+    parts.append(_field_int32(10, tx_power))
     if channel_num:
         parts.append(_field_varint(11, channel_num))
     if override_frequency:
@@ -1114,16 +1116,63 @@ def decode_fromradio(data: bytes) -> dict:
         elif which == "config_complete_id":
             result["config_complete_id"] = fr.config_complete_id
         elif which == "my_info":
-            result["my_info"] = {
-                "my_node_num": fr.my_info.my_node_num,
-                "nodedb_count": getattr(fr.my_info, "nodedb_count", 0),
+            mi = fr.my_info
+            info = {
+                "my_node_num": mi.my_node_num,
+                "nodedb_count": getattr(mi, "nodedb_count", 0),
             }
+            if mi.reboot_count:
+                info["reboot_count"] = mi.reboot_count
+            if mi.min_app_version:
+                info["min_app_version"] = mi.min_app_version
+            if mi.device_id:
+                info["device_id"] = bytes(mi.device_id)
+            if mi.pio_env:
+                info["pio_env"] = mi.pio_env
+            if mi.firmware_edition:
+                info["firmware_edition"] = mi.firmware_edition
+            result["my_info"] = info
         elif which == "node_info":
-            result["node_info"] = {
-                "num": fr.node_info.num,
-                "long_name": fr.node_info.user.long_name if fr.node_info.HasField("user") else "",
-                "short_name": fr.node_info.user.short_name if fr.node_info.HasField("user") else "",
-            }
+            ni = fr.node_info
+            info = {"num": ni.num, "long_name": "", "short_name": ""}
+            if ni.HasField("user"):
+                info["long_name"] = ni.user.long_name
+                info["short_name"] = ni.user.short_name
+                if ni.user.hw_model:
+                    info["hw_model"] = ni.user.hw_model
+                if ni.user.role:
+                    info["role"] = ni.user.role
+                if ni.user.public_key:
+                    info["public_key"] = bytes(ni.user.public_key)
+                if ni.user.is_licensed:
+                    info["is_licensed"] = True
+            if ni.snr:
+                info["snr"] = ni.snr
+            if ni.last_heard:
+                info["last_heard"] = ni.last_heard
+            if ni.channel:
+                info["channel"] = ni.channel
+            if ni.via_mqtt:
+                info["via_mqtt"] = True
+            if ni.hops_away:
+                info["hops_away"] = ni.hops_away
+            if ni.is_favorite:
+                info["is_favorite"] = True
+            if ni.is_ignored:
+                info["is_ignored"] = True
+            if ni.is_muted:
+                info["is_muted"] = True
+            result["node_info"] = info
+        elif which == "config":
+            result["config"] = fr.config.SerializeToString()
+        elif which == "moduleConfig":
+            result["moduleConfig"] = fr.moduleConfig.SerializeToString()
+        elif which == "channel":
+            result["channel"] = fr.channel.SerializeToString()
+        elif which == "metadata":
+            result["metadata"] = fr.metadata.SerializeToString()
+        elif which == "queueStatus":
+            result["queueStatus"] = fr.queueStatus.SerializeToString()
         return result
     return _manual_decode_fromradio(data)
 
@@ -1147,6 +1196,8 @@ def _manual_encode_mesh_packet(packet: MeshPacket) -> bytes:
         parts.append(b"\x48" + _encode_varint(packet.header.hop_limit))
     if packet.header.want_ack:
         parts.append(b"\x50\x01")
+    if packet.header.via_mqtt:
+        parts.append(b"\x70\x01")  # field 14, varint, value 1
     if packet.header.hop_start:
         parts.append(b"\x78" + _encode_varint(packet.header.hop_start))
     return b"".join(parts)
@@ -1160,6 +1211,7 @@ def _manual_decode_mesh_packet(data: bytes) -> MeshPacket:
     pkt_id = 0
     hop_limit = 3
     want_ack = False
+    via_mqtt = False
     hop_start = 3
     encrypted = b""
     decoded_data = None
@@ -1178,6 +1230,8 @@ def _manual_decode_mesh_packet(data: bytes) -> MeshPacket:
                 hop_limit = value
             elif field_num == 10:
                 want_ack = bool(value)
+            elif field_num == 14:
+                via_mqtt = bool(value)
             elif field_num == 15:
                 hop_start = value
         elif wire_type == 2:  # length-delimited
@@ -1208,6 +1262,7 @@ def _manual_decode_mesh_packet(data: bytes) -> MeshPacket:
         id=pkt_id,
         hop_limit=hop_limit,
         want_ack=want_ack,
+        via_mqtt=via_mqtt,
         hop_start=hop_start,
         channel=channel,
     )
