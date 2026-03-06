@@ -224,12 +224,12 @@ class TelemetryService:
             logger.info("Telemetry service started (device=%ds, env=%ds)",
                         self.device_interval, self.environment_interval)
 
-    async def _run(self):
-        # Send initial telemetry after a short delay
-        await asyncio.sleep(5)
+    def send_now(self):
+        """Send device + environment metrics immediately (e.g. after phone connects)."""
         self._send_device_metrics()
         self._send_environment_metrics()
 
+    async def _run(self):
         device_timer = 0
         env_timer = 0
         while True:

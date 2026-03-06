@@ -59,6 +59,7 @@ class BLEGateway:
         self._server = server
         self._fromradio_queue: asyncio.Queue[bytes] = asyncio.Queue()
         self._fromnum_counter = 0
+        self._active_config_id: int | None = None
         self._running = False
         self._phone_connected = False
         self._connection_monitor_task = None
@@ -138,16 +139,25 @@ class BLEGateway:
 
         if "want_config_id" in parsed:
             config_id = parsed["want_config_id"]
-            # Clear stale responses from prior retries to prevent queue flooding
+            if config_id == self._active_config_id and not self._fromradio_queue.empty():
+                # Phone is retrying the same config_id — responses already queued,
+                # let it keep reading instead of resetting progress.
+                logger.debug("Ignoring duplicate want_config_id=%d (%d responses still queued)",
+                             config_id, self._fromradio_queue.qsize())
+                return
+            # New config_id (or queue drained) — generate fresh responses
             while not self._fromradio_queue.empty():
                 try:
                     self._fromradio_queue.get_nowait()
                 except asyncio.QueueEmpty:
                     break
+            self._active_config_id = config_id
             logger.info("Phone requested config (id=%d)", config_id)
             responses = self.config_state.generate_config_response(config_id)
             for resp in responses:
                 self._fromradio_queue.put_nowait(resp)
+            logger.info("Queued %d config responses", len(responses))
+            self._advance_fromradio()
             self._bump_fromnum()
         elif "heartbeat" in parsed:
             logger.debug("Heartbeat received from phone")
@@ -166,6 +176,7 @@ class BLEGateway:
                 for resp in admin_responses:
                     self._fromradio_queue.put_nowait(resp)
                 if admin_responses:
+                    self._advance_fromradio()
                     self._bump_fromnum()
             else:
                 if self._on_packet_from_phone:
@@ -178,6 +189,7 @@ class BLEGateway:
                 mesh_packet_id=packet.header.id,
             )
             self._fromradio_queue.put_nowait(qs)
+            self._advance_fromradio()
             self._bump_fromnum()
         elif "disconnect" in parsed:
             logger.info("Phone requested disconnect")
@@ -185,22 +197,57 @@ class BLEGateway:
     def _handle_read(self, characteristic: object, **kwargs) -> bytearray:
         """Handle FromRadio read from phone.
 
-        On Linux (BlueZ/D-Bus backend), bless ignores the return value and
-        reads characteristic.value directly, so we must set it here.
+        The characteristic.value was pre-loaded with the current message by
+        _advance_fromradio(). After the phone reads it, advance to the next
+        message so it's ready for the next read.
+
+        This handles both bless behaviors:
+        - If bless reads value BEFORE callback: pre-loaded value is returned
+        - If bless reads value AFTER callback: next value is returned
         """
         char_uuid = str(getattr(characteristic, "uuid", ""))
         if FROMRADIO_UUID.lower() not in char_uuid.lower():
             return bytearray()
 
+        # Try pre-loaded value first (set by _advance_fromradio for bless/BlueZ)
+        pre_loaded = getattr(characteristic, "value", None)
+        if pre_loaded:
+            result = bytes(pre_loaded)
+            logger.debug("FROMRADIO read: %d bytes (pre-loaded), %d queued",
+                         len(result), self._fromradio_queue.qsize())
+        else:
+            # Fallback: dequeue directly (mock servers, or first read before preload)
+            try:
+                data = self._fromradio_queue.get_nowait()
+                result = bytes(data)
+            except asyncio.QueueEmpty:
+                result = b""
+            logger.debug("FROMRADIO read: %d bytes (dequeued), %d queued",
+                         len(result), self._fromradio_queue.qsize())
+
+        # Advance: load next message into characteristic for the next read
+        self._advance_fromradio()
+        return bytearray(result)
+
+    def _advance_fromradio(self) -> None:
+        """Pre-load next queued message into FROMRADIO characteristic value.
+
+        Called after queuing data and after each read, so the value is always
+        ready before the phone's next ReadValue call.
+        """
+        if self._server is None:
+            return
+        try:
+            char = self._server.get_characteristic(FROMRADIO_UUID)
+            if char is None:
+                return
+        except Exception:
+            return
         try:
             data = self._fromradio_queue.get_nowait()
-            result = bytearray(data)
+            char.value = bytearray(data)
         except asyncio.QueueEmpty:
-            result = bytearray()
-
-        # BlueZ backend reads characteristic.value, not the return value
-        characteristic.value = result
-        return result
+            char.value = bytearray()
 
     def _bump_fromnum(self) -> None:
         """Increment FromNum counter and notify phone of new data."""
@@ -240,6 +287,7 @@ class BLEGateway:
         """
         fromradio_bytes = encode_fromradio_packet(packet, msg_id=msg_id)
         self._fromradio_queue.put_nowait(fromradio_bytes)
+        self._advance_fromradio()
         self._bump_fromnum()
 
     async def stop(self) -> None:

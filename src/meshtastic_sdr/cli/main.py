@@ -682,6 +682,8 @@ def cmd_ble_gateway(config: SDRConfig):
                     was_connected = True
                     ts = time.strftime("%H:%M:%S")
                     print(f"[{ts}] Phone connected")
+                    # Send telemetry so the phone has metrics immediately
+                    telemetry.send_now()
                 elif not gateway._phone_connected and was_connected:
                     was_connected = False
                     ts = time.strftime("%H:%M:%S")
