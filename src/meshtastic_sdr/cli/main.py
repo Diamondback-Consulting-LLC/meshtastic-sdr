@@ -616,10 +616,10 @@ def cmd_ble_gateway(config: SDRConfig):
                 pkt = create_nodeinfo_packet(fake_sender, ch)
                 return [(pkt, "nodeinfo")]
             elif cmd == "/telemetry":
-                pkt = create_telemetry_device_packet(fake_sender, ch)
+                pkt = create_telemetry_device_packet(our_id, ch)
                 return [(pkt, "device telemetry")]
             elif cmd == "/env":
-                pkt = create_telemetry_env_packet(fake_sender, ch)
+                pkt = create_telemetry_env_packet(our_id, ch)
                 return [(pkt, "environment telemetry")]
             elif cmd == "/waypoint":
                 lat = float(parts[1]) if len(parts) > 1 else sim_cfg.latitude
@@ -638,8 +638,8 @@ def cmd_ble_gateway(config: SDRConfig):
                     (MeshPacket.create_text(text="Hello from simulator", from_node=fake_sender, to=BROADCAST_ADDR, channel=ch), "text"),
                     (create_position_packet(fake_sender, ch, sim_cfg.latitude, sim_cfg.longitude, sim_cfg.altitude), "position"),
                     (create_nodeinfo_packet(fake_sender, ch), "nodeinfo"),
-                    (create_telemetry_device_packet(fake_sender, ch), "device telemetry"),
-                    (create_telemetry_env_packet(fake_sender, ch), "environment telemetry"),
+                    (create_telemetry_device_packet(our_id, ch), "device telemetry"),
+                    (create_telemetry_env_packet(our_id, ch), "environment telemetry"),
                     (create_waypoint_packet(fake_sender, ch, sim_cfg.latitude, sim_cfg.longitude), "waypoint"),
                     (create_traceroute_packet(fake_sender, ch, our_id), "traceroute"),
                     (create_neighborinfo_packet(fake_sender, ch, our_id), "neighborinfo"),
