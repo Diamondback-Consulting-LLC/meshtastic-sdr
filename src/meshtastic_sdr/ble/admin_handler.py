@@ -906,7 +906,16 @@ class AdminHandler:
         settings = channel_data.get("settings", {})
 
         if index != 0:
-            logger.info("set_channel index %d (secondary channels stored but not used for radio)", index)
+            role = channel_data.get("role", 0)
+            if role == 0:  # DISABLED
+                gw.channels[index] = None
+                logger.info("set_channel index %d: disabled", index)
+            else:
+                name = settings.get("name", f"Channel {index}")
+                psk = settings.get("psk", b"")
+                from ..protocol.channels import ChannelConfig
+                gw.channels[index] = ChannelConfig(name=name, psk=psk, index=index)
+                logger.info("set_channel index %d: name=%s role=%d", index, name, role)
             return
 
         changed = False
@@ -931,10 +940,12 @@ class AdminHandler:
                     gw.config.channel.psk = base64.b64encode(new_psk).decode()
             changed = True
 
-        if changed and gw.interface:
-            from ..protocol.encryption import MeshtasticCrypto
-            gw.interface.crypto = MeshtasticCrypto(gw.channel.psk)
-            gw.interface.channel = gw.channel
+        if changed:
+            gw.channels[0] = gw.channel
+            if gw.interface:
+                from ..protocol.encryption import MeshtasticCrypto
+                gw.interface.crypto = MeshtasticCrypto(gw.channel.psk)
+                gw.interface.channel = gw.channel
 
     # --- Radio reconfiguration ---
 

@@ -590,6 +590,7 @@ def cmd_ble_gateway(config: SDRConfig):
             print("  /traceroute                Traceroute")
             print("  /neighborinfo              Neighbor info")
             print("  /all                       Send one of each type")
+            print("  /testch                    Test message on all active channels")
             print("  /help                      This help")
 
         def _dispatch_command(text: str) -> list[tuple[MeshPacket, str]]:
@@ -633,6 +634,20 @@ def cmd_ble_gateway(config: SDRConfig):
             elif cmd == "/neighborinfo":
                 pkt = create_neighborinfo_packet(fake_sender, ch, our_id)
                 return [(pkt, "neighborinfo")]
+            elif cmd == "/testch":
+                packets = []
+                for i, channel in enumerate(gateway.channels):
+                    if channel is not None:
+                        pkt = MeshPacket.create_text(
+                            text=f"Test ch{i}: {channel.display_name}",
+                            from_node=fake_sender,
+                            to=BROADCAST_ADDR,
+                            channel=i,
+                        )
+                        packets.append((pkt, f"text on ch{i} ({channel.display_name})"))
+                if not packets:
+                    print("No active channels configured.")
+                return packets
             elif cmd == "/all":
                 return [
                     (MeshPacket.create_text(text="Hello from simulator", from_node=fake_sender, to=BROADCAST_ADDR, channel=ch), "text"),

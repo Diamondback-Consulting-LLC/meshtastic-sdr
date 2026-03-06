@@ -51,7 +51,9 @@ class BLEGateway:
         """
         self.node = node
         self.channel = channel or ChannelConfig.default()
+        self.channels: list[ChannelConfig | None] = [self.channel] + [None] * 7
         self.config_state = ConfigState(node, channel, config=config)
+        self.config_state._gateway = self
         self.interface = interface
         self.config = config
         self.admin_handler = AdminHandler(self)

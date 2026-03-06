@@ -188,6 +188,7 @@ class FakeGateway:
     def __init__(self):
         self.node = MeshNode(node_id=0x12345678, long_name="Test GW", short_name="TGW")
         self.channel = ChannelConfig.default()
+        self.channels: list[ChannelConfig | None] = [self.channel] + [None] * 7
         self.config = SDRConfig.defaults()
         self.interface = FakeInterface()
 

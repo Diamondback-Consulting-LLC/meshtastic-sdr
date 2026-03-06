@@ -310,22 +310,26 @@ class ConfigState:
         """Generate FromRadio Channel messages for all 8 channels."""
         responses = []
 
-        # Channel 0 = PRIMARY with our actual config
-        responses.append(encode_fromradio_channel(
-            encode_channel(
-                index=0,
-                name=self.channel.name,
-                psk=self.channel.psk,
-                role=1,  # PRIMARY
-            ),
-            msg_id=self._next_id(),
-        ))
+        # Use gateway's channels list if available, otherwise just primary
+        gateway = getattr(self, '_gateway', None)
+        channels = gateway.channels if gateway else [self.channel] + [None] * 7
 
-        # Channels 1-7 = DISABLED
-        for i in range(1, 8):
-            responses.append(encode_fromradio_channel(
-                encode_channel(index=i, role=0),  # DISABLED
-                msg_id=self._next_id(),
-            ))
+        for i, ch in enumerate(channels):
+            if ch is not None:
+                role = 1 if i == 0 else 2  # PRIMARY or SECONDARY
+                responses.append(encode_fromradio_channel(
+                    encode_channel(
+                        index=i,
+                        name=ch.name,
+                        psk=ch.psk,
+                        role=role,
+                    ),
+                    msg_id=self._next_id(),
+                ))
+            else:
+                responses.append(encode_fromradio_channel(
+                    encode_channel(index=i, role=0),  # DISABLED
+                    msg_id=self._next_id(),
+                ))
 
         return responses
