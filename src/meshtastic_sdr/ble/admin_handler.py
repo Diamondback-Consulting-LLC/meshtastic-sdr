@@ -22,7 +22,7 @@ from .constants import (
     ADMIN_GET_DEVICE_METADATA_REQUEST, ADMIN_GET_DEVICE_METADATA_RESPONSE,
     ADMIN_GET_CANNED_MSG_REQUEST, ADMIN_GET_CANNED_MSG_RESPONSE,
     ADMIN_GET_RINGTONE_REQUEST, ADMIN_GET_RINGTONE_RESPONSE,
-    ADMIN_GET_DEVICE_CONN_STATUS_REQUEST,
+    ADMIN_GET_DEVICE_CONN_STATUS_REQUEST, ADMIN_GET_DEVICE_CONN_STATUS_RESPONSE,
     ADMIN_SET_OWNER, ADMIN_SET_CHANNEL, ADMIN_SET_CONFIG, ADMIN_SET_MODULE_CONFIG,
     ADMIN_SET_CANNED_MSG, ADMIN_SET_RINGTONE,
     ADMIN_REMOVE_BY_NODENUM, ADMIN_SET_FAVORITE_NODE, ADMIN_REMOVE_FAVORITE_NODE,
@@ -34,6 +34,10 @@ from .constants import (
     ADMIN_NODEDB_RESET, ADMIN_EXIT_SIMULATOR, ADMIN_SESSION_PASSKEY,
     ADMIN_SET_HAM_MODE, ADMIN_GET_NODE_REMOTE_HW_PINS_REQUEST,
     ADMIN_GET_NODE_REMOTE_HW_PINS_RESPONSE,
+    ADMIN_ENTER_DFU_MODE_REQUEST, ADMIN_DELETE_FILE_REQUEST,
+    ADMIN_SET_SCALE, ADMIN_BACKUP_PREFERENCES, ADMIN_RESTORE_PREFERENCES,
+    ADMIN_REMOVE_BACKUP_PREFERENCES, ADMIN_SEND_INPUT_EVENT,
+    ADMIN_KEY_VERIFICATION, ADMIN_OTA_REQUEST, ADMIN_SENSOR_CONFIG,
     ADMIN_GET_UI_CONFIG_REQUEST, ADMIN_GET_UI_CONFIG_RESPONSE,
     ADMIN_STORE_UI_CONFIG,
     CONFIG_DEVICE, CONFIG_POSITION, CONFIG_POWER, CONFIG_NETWORK,
@@ -73,36 +77,129 @@ logger = logging.getLogger(__name__)
 # Maps proto field_num -> encoder parameter name for each config type.
 
 _CONFIG_VARINT_FIELDS = {
-    "device": {1: "role", 6: "rebroadcast_mode", 7: "node_info_broadcast_secs"},
-    "position": {1: "position_broadcast_secs", 2: "position_broadcast_smart_enabled", 13: "gps_mode"},
-    "power": {1: "is_power_saving", 2: "on_battery_shutdown_after_secs"},
-    "network": {1: "wifi_enabled"},
-    "display": {1: "screen_on_secs", 6: "units"},
+    "device": {
+        1: "role", 2: "serial_enabled", 4: "button_gpio", 5: "buzzer_gpio",
+        6: "rebroadcast_mode", 7: "node_info_broadcast_secs",
+        8: "double_tap_as_button_press", 9: "is_managed",
+        10: "disable_triple_click", 12: "led_heartbeat_disabled",
+        13: "buzzer_mode",
+    },
+    "position": {
+        1: "position_broadcast_secs", 2: "position_broadcast_smart_enabled",
+        3: "fixed_position", 4: "gps_enabled", 5: "gps_update_interval",
+        6: "gps_attempt_time", 7: "position_flags", 8: "rx_gpio", 9: "tx_gpio",
+        10: "broadcast_smart_minimum_distance",
+        11: "broadcast_smart_minimum_interval_secs", 12: "gps_en_gpio",
+        13: "gps_mode",
+    },
+    "power": {
+        1: "is_power_saving", 2: "on_battery_shutdown_after_secs",
+        4: "wait_bluetooth_secs", 6: "sds_secs", 7: "ls_secs",
+        8: "min_wake_secs", 9: "device_battery_ina_address",
+        32: "powermon_enables",
+    },
+    "network": {
+        1: "wifi_enabled", 6: "eth_enabled", 7: "address_mode",
+        10: "enabled_protocols", 11: "ipv6_enabled",
+    },
+    "display": {
+        1: "screen_on_secs", 2: "gps_format", 3: "auto_screen_carousel_secs",
+        4: "compass_north_top", 5: "flip_screen", 6: "units", 7: "oled",
+        8: "displaymode", 9: "heading_bold", 10: "wake_on_tap_or_motion",
+        11: "compass_orientation", 12: "use_12h_clock", 13: "use_long_node_name",
+        14: "enable_message_bubbles",
+    },
     "bluetooth": {1: "enabled", 2: "mode", 3: "fixed_pin"},
-    "security": {5: "serial_enabled", 6: "debug_log_api_enabled", 8: "admin_channel_enabled"},
+    "security": {
+        4: "is_managed", 5: "serial_enabled",
+        6: "debug_log_api_enabled", 8: "admin_channel_enabled",
+    },
 }
 
 _CONFIG_STRING_FIELDS = {
     "device": {11: "tzdef"},
+    "network": {3: "wifi_ssid", 4: "wifi_psk", 5: "ntp_server", 9: "rsyslog_server"},
+}
+
+_CONFIG_FLOAT_FIELDS = {
+    "power": {3: "adc_multiplier_override"},
+}
+
+_CONFIG_BYTES_FIELDS = {
+    "security": {1: "public_key", 2: "private_key"},
 }
 
 _MODULE_VARINT_FIELDS = {
-    "mqtt": {1: "enabled", 8: "proxy_to_client_enabled"},
-    "serial": {1: "enabled"},
-    "external_notification": {1: "enabled"},
-    "store_forward": {1: "enabled"},
-    "range_test": {1: "enabled"},
-    "telemetry": {1: "device_update_interval", 2: "environment_update_interval"},
-    "canned_message": {9: "enabled"},
-    "audio": {1: "enabled"},
-    "remote_hardware": {1: "enabled"},
-    "neighbor_info": {1: "enabled", 2: "update_interval"},
-    "detection_sensor": {1: "enabled"},
-    "paxcounter": {1: "enabled"},
-    "traffic_management": {1: "enabled"},
+    "mqtt": {
+        1: "enabled", 5: "encryption_enabled", 6: "json_enabled",
+        7: "tls_enabled", 9: "proxy_to_client_enabled",
+        10: "map_reporting_enabled",
+    },
+    "serial": {
+        1: "enabled", 2: "echo", 3: "rxd", 4: "txd", 5: "baud",
+        6: "timeout", 7: "mode", 8: "override_console_serial_port",
+    },
+    "external_notification": {
+        1: "enabled", 2: "output_ms", 3: "output", 4: "active",
+        5: "alert_message", 6: "alert_bell", 7: "use_pwm",
+        8: "output_vibra", 9: "output_buzzer", 10: "alert_message_vibra",
+        11: "alert_message_buzzer", 12: "alert_bell_vibra",
+        13: "alert_bell_buzzer", 14: "nag_timeout", 15: "use_i2s_as_buzzer",
+    },
+    "store_forward": {
+        1: "enabled", 2: "heartbeat", 3: "records",
+        4: "history_return_max", 5: "history_return_window", 6: "is_server",
+    },
+    "range_test": {1: "enabled", 2: "sender", 3: "save", 4: "clear_on_reboot"},
+    "telemetry": {
+        1: "device_update_interval", 2: "environment_update_interval",
+        3: "environment_measurement_enabled", 4: "environment_screen_enabled",
+        5: "environment_display_fahrenheit", 6: "air_quality_enabled",
+        7: "air_quality_interval", 8: "power_measurement_enabled",
+        9: "power_update_interval", 10: "power_screen_enabled",
+        11: "health_measurement_enabled", 12: "health_update_interval",
+        13: "health_screen_enabled", 14: "device_telemetry_enabled",
+        15: "air_quality_screen_enabled",
+    },
+    "canned_message": {
+        1: "rotary1_enabled", 2: "inputbroker_pin_a", 3: "inputbroker_pin_b",
+        4: "inputbroker_pin_press", 5: "inputbroker_event_cw",
+        6: "inputbroker_event_ccw", 7: "inputbroker_event_press",
+        8: "updown1_enabled", 9: "enabled", 11: "send_bell",
+    },
+    "audio": {
+        1: "enabled", 2: "ptt_pin", 3: "bitrate", 4: "i2s_ws",
+        5: "i2s_sd", 6: "i2s_din", 7: "i2s_sck",
+    },
+    "remote_hardware": {1: "enabled", 2: "allow_undefined_pin_access"},
+    "neighbor_info": {1: "enabled", 2: "update_interval", 3: "transmit_over_lora"},
+    "ambient_lighting": {
+        1: "led_state", 2: "current", 3: "red", 4: "green", 5: "blue",
+    },
+    "detection_sensor": {
+        1: "enabled", 2: "minimum_broadcast_secs", 3: "state_broadcast_secs",
+        4: "send_bell", 6: "monitor_pin", 7: "detection_trigger_type",
+        8: "use_pullup",
+    },
+    "paxcounter": {
+        1: "enabled", 2: "paxcounter_update_interval",
+        3: "wifi_threshold", 4: "ble_threshold",
+    },
+    "traffic_management": {
+        1: "enabled", 2: "position_dedup_enabled", 3: "position_precision_bits",
+        4: "position_min_interval_secs", 5: "nodeinfo_direct_response",
+        6: "nodeinfo_direct_response_max_hops", 7: "rate_limit_enabled",
+        8: "rate_limit_window_secs", 9: "rate_limit_max_packets",
+        10: "drop_unknown_enabled", 11: "unknown_packet_threshold",
+        12: "exhaust_hop_telemetry", 13: "exhaust_hop_position",
+        14: "router_preserve_hops",
+    },
 }
 
 _MODULE_STRING_FIELDS = {
+    "mqtt": {2: "address", 3: "username", 4: "password", 8: "root"},
+    "canned_message": {10: "allow_input_source"},
+    "detection_sensor": {5: "name"},
     "statusmessage": {1: "node_status"},
 }
 
@@ -110,11 +207,68 @@ _MODULE_STRING_FIELDS = {
 _BOOL_FIELD_NAMES = frozenset({
     "position_broadcast_smart_enabled", "is_power_saving", "wifi_enabled",
     "enabled", "serial_enabled", "debug_log_api_enabled", "admin_channel_enabled",
-    "proxy_to_client_enabled",
+    "proxy_to_client_enabled", "fixed_position", "gps_enabled",
+    "double_tap_as_button_press", "is_managed", "disable_triple_click",
+    "led_heartbeat_disabled", "eth_enabled", "ipv6_enabled",
+    "flip_screen", "heading_bold", "wake_on_tap_or_motion",
+    "use_12h_clock", "use_long_node_name", "enable_message_bubbles",
+    "compass_north_top",
+    "encryption_enabled", "json_enabled", "tls_enabled", "map_reporting_enabled",
+    "echo", "override_console_serial_port",
+    "active", "alert_message", "alert_bell", "use_pwm",
+    "alert_message_vibra", "alert_message_buzzer", "alert_bell_vibra",
+    "alert_bell_buzzer", "use_i2s_as_buzzer",
+    "heartbeat", "is_server",
+    "save", "clear_on_reboot",
+    "environment_measurement_enabled", "environment_screen_enabled",
+    "environment_display_fahrenheit", "air_quality_enabled",
+    "power_measurement_enabled", "power_screen_enabled",
+    "health_measurement_enabled", "health_screen_enabled",
+    "device_telemetry_enabled", "air_quality_screen_enabled",
+    "rotary1_enabled", "updown1_enabled", "send_bell",
+    "allow_undefined_pin_access",
+    "transmit_over_lora",
+    "led_state",
+    "use_pullup",
+    "position_dedup_enabled", "nodeinfo_direct_response",
+    "rate_limit_enabled", "drop_unknown_enabled",
+    "exhaust_hop_telemetry", "exhaust_hop_position", "router_preserve_hops",
+})
+
+# Fields that need signed int32 interpretation (negative varint)
+_INT32_FIELD_NAMES = frozenset({
+    "wifi_threshold", "ble_threshold",
 })
 
 
-def _decode_named_fields(data: bytes, varint_map: dict, string_map: dict | None = None) -> dict:
+def _decode_repeated_bytes(data: bytes, target_field: int) -> list[bytes]:
+    """Extract all repeated bytes values for a specific field number."""
+    results = []
+    pos = 0
+    while pos < len(data):
+        tag_byte, pos = _decode_varint(data, pos)
+        field_num = tag_byte >> 3
+        wire_type = tag_byte & 0x07
+        if wire_type == 0:
+            _, pos = _decode_varint(data, pos)
+        elif wire_type == 2:
+            length, pos = _decode_varint(data, pos)
+            blob = data[pos:pos + length]
+            pos += length
+            if field_num == target_field:
+                results.append(blob)
+        elif wire_type == 5:
+            pos += 4
+        elif wire_type == 1:
+            pos += 8
+        else:
+            break
+    return results
+
+
+def _decode_named_fields(data: bytes, varint_map: dict, string_map: dict | None = None,
+                          float_map: dict | None = None,
+                          bytes_map: dict | None = None) -> dict:
     """Decode protobuf fields using named field maps.
 
     Returns dict with encoder-compatible parameter names.
@@ -130,16 +284,28 @@ def _decode_named_fields(data: bytes, varint_map: dict, string_map: dict | None 
             value, pos = _decode_varint(data, pos)
             if field_num in varint_map:
                 name = varint_map[field_num]
-                result[name] = bool(value) if name in _BOOL_FIELD_NAMES else value
+                if name in _BOOL_FIELD_NAMES:
+                    result[name] = bool(value)
+                elif name in _INT32_FIELD_NAMES:
+                    value = value & 0xFFFFFFFF
+                    if value >= 0x80000000:
+                        value -= 0x100000000
+                    result[name] = value
+                else:
+                    result[name] = value
         elif wire_type == 2:
             length, pos = _decode_varint(data, pos)
             blob = data[pos:pos + length]
             pos += length
-            if string_map and field_num in string_map:
+            if bytes_map and field_num in bytes_map:
+                result[bytes_map[field_num]] = blob
+            elif string_map and field_num in string_map:
                 result[string_map[field_num]] = blob.decode("utf-8", errors="replace")
         elif wire_type == 5:
             if pos + 4 > len(data):
                 break
+            if float_map and field_num in float_map:
+                result[float_map[field_num]] = struct.unpack("<f", data[pos:pos + 4])[0]
             pos += 4
         elif wire_type == 1:
             if pos + 8 > len(data):
@@ -214,7 +380,11 @@ def _dispatch_varint(field_num: int, value: int) -> dict:
         ADMIN_SET_TIME_ONLY: ("set_time_only", None),
         ADMIN_GET_UI_CONFIG_REQUEST: ("get_ui_config_request", True),
         ADMIN_GET_NODE_REMOTE_HW_PINS_REQUEST: ("get_node_remote_hw_pins_request", True),
-        ADMIN_SESSION_PASSKEY: ("session_passkey", None),
+        ADMIN_ENTER_DFU_MODE_REQUEST: ("enter_dfu_mode_request", True),
+        ADMIN_SET_SCALE: ("set_scale", None),
+        ADMIN_BACKUP_PREFERENCES: ("backup_preferences", None),
+        ADMIN_RESTORE_PREFERENCES: ("restore_preferences", None),
+        ADMIN_REMOVE_BACKUP_PREFERENCES: ("remove_backup_preferences", None),
     }
     if field_num in mapping:
         key, fixed_value = mapping[field_num]
@@ -263,10 +433,30 @@ def _dispatch_submsg(field_num: int, blob: bytes) -> dict:
         return {"set_ham_mode": _decode_generic(blob)}
     elif field_num == ADMIN_STORE_UI_CONFIG:
         return {"store_ui_config": _decode_generic(blob)}
+    elif field_num == ADMIN_GET_DEVICE_METADATA_RESPONSE:
+        return {"get_device_metadata_response": _decode_generic(blob)}
+    elif field_num == ADMIN_GET_DEVICE_CONN_STATUS_RESPONSE:
+        return {"get_device_connection_status_response": _decode_generic(blob)}
+    elif field_num == ADMIN_GET_CANNED_MSG_RESPONSE:
+        return {"get_canned_message_response": blob.decode("utf-8", errors="replace")}
+    elif field_num == ADMIN_GET_RINGTONE_RESPONSE:
+        return {"get_ringtone_response": blob.decode("utf-8", errors="replace")}
     elif field_num == ADMIN_GET_UI_CONFIG_RESPONSE:
         return {"get_ui_config_response": _decode_generic(blob)}
     elif field_num == ADMIN_GET_NODE_REMOTE_HW_PINS_RESPONSE:
         return {"get_node_remote_hw_pins_response": _decode_generic(blob)}
+    elif field_num == ADMIN_SESSION_PASSKEY:
+        return {"session_passkey": blob}
+    elif field_num == ADMIN_DELETE_FILE_REQUEST:
+        return {"delete_file_request": blob.decode("utf-8", errors="replace")}
+    elif field_num == ADMIN_SEND_INPUT_EVENT:
+        return {"send_input_event": _decode_generic(blob)}
+    elif field_num == ADMIN_KEY_VERIFICATION:
+        return {"key_verification": _decode_generic(blob)}
+    elif field_num == ADMIN_OTA_REQUEST:
+        return {"ota_request": _decode_generic(blob)}
+    elif field_num == ADMIN_SENSOR_CONFIG:
+        return {"sensor_config": _decode_generic(blob)}
     return {"unknown_submsg_field": field_num, "raw_len": len(blob)}
 
 
@@ -275,7 +465,7 @@ def _dispatch_submsg(field_num: int, blob: bytes) -> dict:
 CONFIG_FIELD_TO_NAME = {
     1: "device", 2: "position", 3: "power", 4: "network",
     5: "display", 6: "lora", 7: "bluetooth", 8: "security",
-    9: "sessionkey",
+    9: "sessionkey", 10: "device_ui",
 }
 
 MODULE_FIELD_TO_NAME = {
@@ -302,10 +492,24 @@ def _decode_config(data: bytes) -> dict:
             name = CONFIG_FIELD_TO_NAME.get(field_num)
             if name == "lora":
                 return {"lora": _decode_lora_config(blob)}
+            elif name == "security":
+                result = _decode_named_fields(
+                    blob, _CONFIG_VARINT_FIELDS["security"],
+                    _CONFIG_STRING_FIELDS.get("security"),
+                    _CONFIG_FLOAT_FIELDS.get("security"),
+                    _CONFIG_BYTES_FIELDS.get("security"),
+                )
+                # Decode admin_key (field 3, repeated bytes) separately
+                admin_keys = _decode_repeated_bytes(blob, 3)
+                if admin_keys:
+                    result["admin_key"] = admin_keys
+                return {"security": result}
             elif name and name in _CONFIG_VARINT_FIELDS:
                 return {name: _decode_named_fields(
                     blob, _CONFIG_VARINT_FIELDS[name],
                     _CONFIG_STRING_FIELDS.get(name),
+                    _CONFIG_FLOAT_FIELDS.get(name),
+                    _CONFIG_BYTES_FIELDS.get(name),
                 )}
             elif name:
                 return {name: _decode_generic(blob)}
@@ -339,6 +543,8 @@ def _decode_module_config(data: bytes) -> dict:
                     blob,
                     _MODULE_VARINT_FIELDS.get(name, {}),
                     _MODULE_STRING_FIELDS.get(name),
+                    None,  # no float fields in modules
+                    None,  # no bytes fields in modules
                 )}
             return {name: _decode_generic(blob)}
         elif wire_type == 0:
@@ -356,6 +562,7 @@ def _decode_lora_config(data: bytes) -> dict:
     """Decode Config.LoRaConfig fields."""
     result = {"modem_preset": 0, "modem_preset_name": "LONG_FAST",
               "region": 0, "region_name": "UNSET"}
+    ignore_incoming = []
     pos = 0
     while pos < len(data):
         tag_byte, pos = _decode_varint(data, pos)
@@ -383,9 +590,25 @@ def _decode_lora_config(data: bytes) -> dict:
             elif field_num == 9:
                 result["tx_enabled"] = bool(value)
             elif field_num == 10:
+                # tx_power is int32 — sign-extend if needed
+                value = value & 0xFFFFFFFF
+                if value >= 0x80000000:
+                    value -= 0x100000000
                 result["tx_power"] = value
             elif field_num == 11:
                 result["channel_num"] = value
+            elif field_num == 12:
+                result["override_duty_cycle"] = bool(value)
+            elif field_num == 13:
+                result["sx126x_rx_boosted_gain"] = bool(value)
+            elif field_num == 15:
+                result["pa_fan_disabled"] = bool(value)
+            elif field_num == 103:
+                ignore_incoming.append(value)
+            elif field_num == 104:
+                result["ignore_mqtt"] = bool(value)
+            elif field_num == 105:
+                result["config_ok_to_mqtt"] = bool(value)
         elif wire_type == 2:
             length, pos = _decode_varint(data, pos)
             pos += length
@@ -403,6 +626,8 @@ def _decode_lora_config(data: bytes) -> dict:
             pos += 8
         else:
             break
+    if ignore_incoming:
+        result["ignore_incoming"] = ignore_incoming
     return result
 
 
@@ -462,6 +687,10 @@ def _decode_channel_settings(data: bytes) -> dict:
             elif field_num == 3:
                 result["name"] = blob.decode("utf-8", errors="replace")
         elif wire_type == 5:
+            if pos + 4 > len(data):
+                break
+            if field_num == 4:
+                result["id"] = struct.unpack("<I", data[pos:pos + 4])[0]
             pos += 4
         elif wire_type == 1:
             pos += 8
@@ -537,13 +766,25 @@ def _encode_module_config_response(module_bytes: bytes) -> bytes:
 
 
 def encode_owner_response(long_name: str, short_name: str, node_id: int,
-                          hw_model: int = HW_MODEL_LINUX_NATIVE) -> bytes:
-    """Encode an AdminMessage get_owner_response with User data."""
+                          hw_model: int = HW_MODEL_LINUX_NATIVE,
+                          role: int = 0, public_key: bytes = b"",
+                          is_licensed: bool = False) -> bytes:
+    """Encode an AdminMessage get_owner_response with User data.
+
+    User: 1=id, 2=long_name, 3=short_name, 5=hw_model, 6=is_licensed,
+    7=role, 8=public_key
+    """
     user_parts = []
     user_parts.append(_field_string(1, f"!{node_id:08x}"))
     user_parts.append(_field_string(2, long_name))
     user_parts.append(_field_string(3, short_name))
     user_parts.append(_field_varint(5, hw_model))
+    if is_licensed:
+        user_parts.append(_field_bool(6, True))
+    if role:
+        user_parts.append(_field_varint(7, role))
+    if public_key:
+        user_parts.append(_field_bytes(8, public_key))
     user_bytes = b"".join(user_parts)
     # AdminMessage field 4 = get_owner_response
     return _field_submsg(ADMIN_GET_OWNER_RESPONSE, user_bytes)
@@ -561,14 +802,36 @@ def encode_device_metadata_response(firmware_version: str = "2.6.0.sdr",
                                      hw_model: int = HW_MODEL_LINUX_NATIVE,
                                      has_bluetooth: bool = True,
                                      has_wifi: bool = False,
+                                     has_ethernet: bool = False,
+                                     can_shutdown: bool = False,
+                                     has_remote_hardware: bool = False,
+                                     has_pkc: bool = False,
+                                     role: int = 0,
+                                     position_flags: int = 0,
+                                     excluded_modules: int = 0,
                                      device_state_version: int = 24) -> bytes:
-    """Encode an AdminMessage get_device_metadata_response."""
+    """Encode an AdminMessage get_device_metadata_response.
+
+    DeviceMetadata: 1=firmware_version, 2=device_state_version, 3=canShutdown,
+    4=hasWifi, 5=hasBluetooth, 6=hasEthernet, 7=role, 8=position_flags,
+    9=hw_model, 10=hasRemoteHardware, 11=hasPKC, 12=excluded_modules
+    """
     parts = []
     parts.append(_field_string(1, firmware_version))
     parts.append(_tag(2, 0) + _encode_varint(device_state_version))
+    parts.append(_field_bool(3, can_shutdown))
     parts.append(_field_bool(4, has_wifi))
     parts.append(_field_bool(5, has_bluetooth))
+    parts.append(_field_bool(6, has_ethernet))
+    if role:
+        parts.append(_field_varint(7, role))
+    if position_flags:
+        parts.append(_field_varint(8, position_flags))
     parts.append(_field_varint(9, hw_model))
+    parts.append(_field_bool(10, has_remote_hardware))
+    parts.append(_field_bool(11, has_pkc))
+    if excluded_modules:
+        parts.append(_field_varint(12, excluded_modules))
     meta_bytes = b"".join(parts)
     return _field_submsg(ADMIN_GET_DEVICE_METADATA_RESPONSE, meta_bytes)
 
@@ -626,7 +889,37 @@ class AdminHandler:
             logger.info("get_node_remote_hw_pins_request (not implemented)")
 
         elif "session_passkey" in admin:
-            logger.info("session_passkey: %s", admin["session_passkey"])
+            logger.info("session_passkey: %s bytes", len(admin["session_passkey"]))
+
+        elif "enter_dfu_mode_request" in admin:
+            logger.info("enter_dfu_mode_request (not applicable for SDR)")
+
+        elif "delete_file_request" in admin:
+            logger.info("delete_file_request: %s (not applicable for SDR)", admin["delete_file_request"])
+
+        elif "set_scale" in admin:
+            logger.info("set_scale: %d (acknowledged)", admin["set_scale"])
+
+        elif "backup_preferences" in admin:
+            logger.info("backup_preferences (not applicable for SDR)")
+
+        elif "restore_preferences" in admin:
+            logger.info("restore_preferences (not applicable for SDR)")
+
+        elif "remove_backup_preferences" in admin:
+            logger.info("remove_backup_preferences (not applicable for SDR)")
+
+        elif "send_input_event" in admin:
+            logger.info("send_input_event (acknowledged)")
+
+        elif "key_verification" in admin:
+            logger.info("key_verification (acknowledged)")
+
+        elif "ota_request" in admin:
+            logger.info("ota_request (not applicable for SDR)")
+
+        elif "sensor_config" in admin:
+            logger.info("sensor_config (not applicable for SDR)")
 
         # --- SET requests ---
         elif "set_config" in admin:
@@ -898,6 +1191,12 @@ class AdminHandler:
             gw.node.short_name = user["short_name"][:4]
             if gw.config:
                 gw.config.node.short_name = user["short_name"][:4]
+        if "is_licensed" in user:
+            logger.info("Owner is_licensed: %s", user["is_licensed"])
+        if "role" in user:
+            logger.info("Owner role: %d", user["role"])
+        if "public_key" in user:
+            logger.info("Owner public_key: %d bytes", len(user["public_key"]))
 
     def _handle_set_channel(self, channel_data: dict) -> None:
         """Apply a set_channel AdminMessage."""

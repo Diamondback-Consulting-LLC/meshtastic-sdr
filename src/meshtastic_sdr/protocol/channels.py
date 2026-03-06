@@ -59,6 +59,12 @@ REGIONS = {
     "GH_915": RegionConfig("GH_915", 915.0, 928.0, 52, 30, 0),
     "NG_433": RegionConfig("NG_433", 433.05, 434.79, 7, 10, 0),
     "NG_915": RegionConfig("NG_915", 915.0, 928.0, 52, 30, 0),
+    "PH_915": RegionConfig("PH_915", 915.0, 928.0, 52, 21, 0),
+    "ANZ_433": RegionConfig("ANZ_433", 433.05, 434.79, 7, 10, 0),
+    "KZ_433": RegionConfig("KZ_433", 433.05, 434.79, 7, 10, 0),
+    "KZ_863": RegionConfig("KZ_863", 863.0, 870.0, 28, 14, 0),
+    "NP_865": RegionConfig("NP_865", 865.0, 867.0, 8, 30, 0),
+    "BR_902": RegionConfig("BR_902", 902.0, 907.5, 22, 30, 0),
 }
 
 DEFAULT_REGION = "US"

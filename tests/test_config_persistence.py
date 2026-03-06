@@ -106,7 +106,7 @@ class TestNamedFieldDecoder:
     def test_decode_mqtt_module(self):
         """MQTT module fields decode with named keys."""
         data = _tag(1, 0) + _encode_varint(1)  # enabled
-        data += _tag(8, 0) + _encode_varint(1)  # proxy_to_client_enabled
+        data += _tag(9, 0) + _encode_varint(1)  # proxy_to_client_enabled (field 9)
 
         result = _decode_named_fields(data, _MODULE_VARINT_FIELDS["mqtt"])
         assert result["enabled"] is True
