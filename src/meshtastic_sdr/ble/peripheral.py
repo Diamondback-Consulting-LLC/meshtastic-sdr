@@ -81,20 +81,20 @@ class BLEGateway:
         if HAS_BLESS:
             await self._server.add_new_service(SERVICE_UUID)
 
-            # ToRadio: Write with Response (encryption required — triggers bonding)
+            # ToRadio: Write with Response
             await self._server.add_new_characteristic(
                 SERVICE_UUID, TORADIO_UUID,
                 GATTCharacteristicProperties.write,
                 None,
-                GATTAttributePermissions.writeable | GATTAttributePermissions.write_encryption_required,
+                GATTAttributePermissions.writeable,
             )
 
-            # FromRadio: Read (encryption required — triggers bonding)
+            # FromRadio: Read
             await self._server.add_new_characteristic(
                 SERVICE_UUID, FROMRADIO_UUID,
                 GATTCharacteristicProperties.read,
                 None,
-                GATTAttributePermissions.readable | GATTAttributePermissions.read_encryption_required,
+                GATTAttributePermissions.readable,
             )
 
             # FromNum: Notify
@@ -138,6 +138,12 @@ class BLEGateway:
 
         if "want_config_id" in parsed:
             config_id = parsed["want_config_id"]
+            # Clear stale responses from prior retries to prevent queue flooding
+            while not self._fromradio_queue.empty():
+                try:
+                    self._fromradio_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
             logger.info("Phone requested config (id=%d)", config_id)
             responses = self.config_state.generate_config_response(config_id)
             for resp in responses:
@@ -177,16 +183,24 @@ class BLEGateway:
             logger.info("Phone requested disconnect")
 
     def _handle_read(self, characteristic: object, **kwargs) -> bytearray:
-        """Handle FromRadio read from phone."""
+        """Handle FromRadio read from phone.
+
+        On Linux (BlueZ/D-Bus backend), bless ignores the return value and
+        reads characteristic.value directly, so we must set it here.
+        """
         char_uuid = str(getattr(characteristic, "uuid", ""))
         if FROMRADIO_UUID.lower() not in char_uuid.lower():
             return bytearray()
 
         try:
             data = self._fromradio_queue.get_nowait()
-            return bytearray(data)
+            result = bytearray(data)
         except asyncio.QueueEmpty:
-            return bytearray()
+            result = bytearray()
+
+        # BlueZ backend reads characteristic.value, not the return value
+        characteristic.value = result
+        return result
 
     def _bump_fromnum(self) -> None:
         """Increment FromNum counter and notify phone of new data."""
