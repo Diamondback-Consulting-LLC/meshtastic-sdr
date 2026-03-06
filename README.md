@@ -70,6 +70,34 @@ meshtastic-sdr ble-gateway --name "SDR Gateway"
 
 **Note:** Linux requires root or `CAP_NET_ADMIN` for BLE advertising.
 
+#### Simulator Commands
+
+While the gateway is running, type in the console to inject simulated packets that appear on the connected phone. Plain text sends a chat message; slash commands send other packet types:
+
+```
+Hello world              → text message in chat
+/pos                     → GPS position (from config defaults)
+/pos 59.9 10.7           → GPS position (custom lat lon)
+/node                    → node info (SimNode Alpha)
+/telemetry               → device metrics (battery, uptime)
+/env                     → environment metrics (CPU temp)
+/waypoint                → waypoint pin (config defaults)
+/waypoint 59.9 10.7 Home → waypoint pin (custom location + name)
+/traceroute              → fake traceroute with 2 hops
+/neighborinfo            → fake neighbor list
+/all                     → send one of each type above
+/help                    → print available commands
+```
+
+Default coordinates (Oslo, Norway) can be changed in the config file:
+
+```yaml
+simulator:
+  latitude: 59.9139
+  longitude: 10.7522
+  altitude: 25
+```
+
 ## Configuration
 
 meshtastic-sdr uses YAML config files for persistent settings. Config file search order:
