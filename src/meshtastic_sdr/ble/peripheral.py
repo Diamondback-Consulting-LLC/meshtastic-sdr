@@ -10,7 +10,7 @@ import struct
 import logging
 from typing import Optional, Callable
 
-from .constants import SERVICE_UUID, TORADIO_UUID, FROMRADIO_UUID, FROMNUM_UUID
+from .constants import SERVICE_UUID, TORADIO_UUID, FROMRADIO_UUID, FROMNUM_UUID, LOGRADIO_UUID
 from .config_state import ConfigState
 from .admin_handler import AdminHandler
 from .protobuf_codec import (
@@ -60,6 +60,8 @@ class BLEGateway:
         self._fromradio_queue: asyncio.Queue[bytes] = asyncio.Queue()
         self._fromnum_counter = 0
         self._running = False
+        self._phone_connected = False
+        self._connection_monitor_task = None
 
     async def start(self, name: str = "Meshtastic SDR") -> None:
         """Start the BLE GATT server and begin advertising."""
@@ -71,6 +73,7 @@ class BLEGateway:
         await self._setup_gatt()
         await self._server.start()
         self._running = True
+        self._connection_monitor_task = asyncio.ensure_future(self._monitor_connection())
         logger.info("BLE Gateway started, advertising as '%s'", name)
 
     async def _setup_gatt(self) -> None:
@@ -78,25 +81,33 @@ class BLEGateway:
         if HAS_BLESS:
             await self._server.add_new_service(SERVICE_UUID)
 
-            # ToRadio: Write with Response
+            # ToRadio: Write with Response (encryption required — triggers bonding)
             await self._server.add_new_characteristic(
                 SERVICE_UUID, TORADIO_UUID,
                 GATTCharacteristicProperties.write,
                 None,
-                GATTAttributePermissions.writeable,
+                GATTAttributePermissions.writeable | GATTAttributePermissions.write_encryption_required,
             )
 
-            # FromRadio: Read
+            # FromRadio: Read (encryption required — triggers bonding)
             await self._server.add_new_characteristic(
                 SERVICE_UUID, FROMRADIO_UUID,
                 GATTCharacteristicProperties.read,
                 None,
-                GATTAttributePermissions.readable,
+                GATTAttributePermissions.readable | GATTAttributePermissions.read_encryption_required,
             )
 
             # FromNum: Notify
             await self._server.add_new_characteristic(
                 SERVICE_UUID, FROMNUM_UUID,
+                GATTCharacteristicProperties.notify,
+                None,
+                GATTAttributePermissions.readable,
+            )
+
+            # LogRadio: Notify (required by Android app for service discovery)
+            await self._server.add_new_characteristic(
+                SERVICE_UUID, LOGRADIO_UUID,
                 GATTCharacteristicProperties.notify,
                 None,
                 GATTAttributePermissions.readable,
@@ -190,6 +201,23 @@ class BLEGateway:
             except Exception:
                 pass
 
+    async def _monitor_connection(self) -> None:
+        """Poll bless for connection state changes and log them."""
+        while self._running:
+            try:
+                connected = False
+                if HAS_BLESS and hasattr(self._server, 'is_connected'):
+                    connected = await self._server.is_connected()
+                if connected and not self._phone_connected:
+                    self._phone_connected = True
+                    logger.info("Phone connected via BLE")
+                elif not connected and self._phone_connected:
+                    self._phone_connected = False
+                    logger.info("Phone disconnected from BLE")
+            except Exception:
+                pass
+            await asyncio.sleep(2)
+
     def queue_packet_for_phone(self, packet: MeshPacket, msg_id: int = 0) -> None:
         """Queue a received-from-air packet to send to the connected phone.
 
@@ -203,6 +231,9 @@ class BLEGateway:
     async def stop(self) -> None:
         """Stop the BLE GATT server."""
         self._running = False
+        if self._connection_monitor_task:
+            self._connection_monitor_task.cancel()
+            self._connection_monitor_task = None
         if self._server is not None:
             await self._server.stop()
         logger.info("BLE Gateway stopped")

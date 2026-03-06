@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import logging
 import sys
 import time
 
@@ -306,6 +307,8 @@ def main():
     # Global options
     parser.add_argument("--config", default=None,
                         help="Path to config YAML file")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="Increase verbosity (-v for INFO, -vv for DEBUG)")
     parser.add_argument("--simulate", action="store_true",
                         help="Use simulated radio (no hardware needed)")
     parser.add_argument("--region", default=_UNSET,
@@ -357,6 +360,14 @@ def main():
                                              help="Act as BLE gateway for phone connections")
 
     args = parser.parse_args()
+
+    # Configure logging verbosity
+    if args.verbose >= 2:
+        logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
+    elif args.verbose >= 1:
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
+    else:
+        logging.basicConfig(level=logging.WARNING)
 
     # Load config and merge CLI overrides
     config = load_config(args.config)
@@ -482,7 +493,11 @@ def cmd_ble_gateway(config: SDRConfig):
     """Start BLE gateway — advertise as Meshtastic device for phone connections."""
     async def _run():
         from ..ble.peripheral import BLEGateway
+        from ..ble.pairing import register_pairing_agent
         from ..protocol.channels import ChannelConfig
+
+        # Register BlueZ pairing agent for Android bonding support
+        await register_pairing_agent()
 
         # Create the SDR interface for radio TX/RX
         interface = create_interface(config)
@@ -502,12 +517,21 @@ def cmd_ble_gateway(config: SDRConfig):
             config=config,
         )
 
-        node_name = config.node.long_name
-        print(f"Starting BLE gateway as '{node_name}'...")
+        # BLE name must match Meshtastic pattern: *_XXXX (last 4 hex of node ID)
+        # Android app filters on regex: ^.*_([0-9a-fA-F]{4})$
+        node_suffix = f"{interface.node.node_id & 0xFFFF:04x}"
+        ble_name = config.ble.gateway_name
+        if not ble_name or ble_name == "Meshtastic SDR":
+            ble_name = f"Meshtastic_{node_suffix}"
+        elif not ble_name.endswith(f"_{node_suffix}"):
+            # Ensure custom names also match the pattern
+            ble_name = f"{ble_name}_{node_suffix}"
+
+        print(f"Starting BLE gateway as '{ble_name}'...")
         print(f"  Region: {config.region}, Preset: {config.preset}")
         print(f"  Frequency: {interface.frequency / 1e6:.3f} MHz")
         print(f"  Node ID: {interface.node.node_id_str}")
-        await gateway.start(name=node_name)
+        await gateway.start(name=ble_name)
         print("BLE Gateway running. Waiting for phone connections...")
         print("Press Ctrl+C to stop.\n")
 
@@ -520,13 +544,34 @@ def cmd_ble_gateway(config: SDRConfig):
 
         interface.start_receive(on_radio_packet)
 
+        # Start telemetry service
+        from ..ble.telemetry import TelemetryService
+        telemetry = TelemetryService(
+            gateway=gateway,
+            node_id=interface.node.node_id,
+            device_interval=900,
+            environment_interval=900,
+        )
+        telemetry.start()
+
+        # Monitor connection state for console output
+        was_connected = False
         try:
             while True:
                 await asyncio.sleep(1)
+                if gateway._phone_connected and not was_connected:
+                    was_connected = True
+                    ts = time.strftime("%H:%M:%S")
+                    print(f"[{ts}] Phone connected")
+                elif not gateway._phone_connected and was_connected:
+                    was_connected = False
+                    ts = time.strftime("%H:%M:%S")
+                    print(f"[{ts}] Phone disconnected")
         except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         finally:
             print("\nShutting down...")
+            telemetry.stop()
             await gateway.stop()
             interface.close()
 
